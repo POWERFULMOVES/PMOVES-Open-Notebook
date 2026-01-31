@@ -1,0 +1,136 @@
+# PMOVES.AI Docker Compose YAML Anchors Template
+#
+# These YAML anchors provide standardized environment loading for PMOVES services.
+# Include this file or copy the anchors into your docker-compose.yml.
+#
+# Usage:
+#   services:
+#     my-service:
+#       <<: *env-tier-api
+#       environment:
+#         SERVICE_NAME: my-service
+#         SERVICE_SPECIFIC_VAR: value
+
+version: "3.8"
+
+# PMOVES.AI Environment Loading Anchors
+# These anchors provide tier-based environment file loading
+# NOTE: Use map-based environment vars (not list-based) for proper YAML merging
+x-pmoves-env: &pmoves-env-base
+  env_file:
+    - env.shared      # Base PMOVES.AI configuration
+  environment:
+    PMOVES_ENV: ${PMOVES_ENV:-production}
+    TIER: ${TIER}
+    NATS_URL: ${NATS_URL:-nats://nats:4222}
+    TENSORZERO_URL: ${TENSORZERO_URL:-http://tensorzero-gateway:3030}
+
+# API Tier Environment
+x-env-tier-api: &env-tier-api
+  <<: *pmoves-env-base
+  env_file:
+    - env.shared
+    - env.tier-api    # API tier specific configuration
+  environment:
+    TIER: api
+    MAX_CONCURRENT_REQUESTS: ${MAX_CONCURRENT_REQUESTS:-100}
+    RATE_LIMIT_ENABLED: ${RATE_LIMIT_ENABLED:-true}
+
+# Agent Tier Environment
+x-env-tier-agent: &env-tier-agent
+  <<: *pmoves-env-base
+  env_file:
+    - env.shared
+    - env.tier-agent  # Agent tier specific configuration
+  environment:
+    TIER: agent
+    MAX_CONCURRENT_AGENTS: ${MAX_CONCURRENT_AGENTS:-50}
+    MCP_ENABLED: ${MCP_ENABLED:-true}
+
+# Worker Tier Environment
+x-env-tier-worker: &env-tier-worker
+  <<: *pmoves-env-base
+  env_file:
+    - env.shared
+    - env.tier-worker # Worker tier specific configuration
+  environment:
+    TIER: worker
+    MAX_CONCURRENT_JOBS: ${MAX_CONCURRENT_JOBS:-10}
+    WORKER_POOL_SIZE: ${WORKER_POOL_SIZE:-4}
+
+# Data Tier Environment
+x-env-tier-data: &env-tier-data
+  <<: *pmoves-env-base
+  env_file:
+    - env.shared
+    - env.tier-data   # Data tier specific configuration
+  environment:
+    TIER: data
+    MAX_CONNECTIONS: ${MAX_CONNECTIONS:-100}
+
+# LLM Tier Environment
+x-env-tier-llm: &env-tier-llm
+  <<: *pmoves-env-base
+  env_file:
+    - env.shared
+    - env.tier-llm    # LLM tier specific configuration
+  environment:
+    TIER: llm
+    MAX_CONCURRENT_REQUESTS: ${MAX_CONCURRENT_REQUESTS:-50}
+
+# Media Tier Environment
+x-env-tier-media: &env-tier-media
+  <<: *pmoves-env-base
+  env_file:
+    - env.shared
+    - env.tier-media  # Media tier specific configuration
+  environment:
+    TIER: media
+    GPU_ENABLED: ${GPU_ENABLED:-true}
+    MAX_CONCURRENT_JOBS: ${MAX_CONCURRENT_JOBS:-4}
+
+# Health check template
+x-pmoves-healthcheck: &pmoves-healthcheck
+  healthcheck:
+    test: ["CMD", "curl", "-f", "http://localhost:8080/healthz"]
+    interval: 30s
+    timeout: 5s
+    retries: 3
+    start_period: 10s
+
+# GPU resource template
+x-pmoves-gpu: &pmoves-gpu-resource
+  deploy:
+    resources:
+      reservations:
+        devices:
+          - driver: nvidia
+            count: 1
+            capabilities: [gpu]
+
+# Service labels for Prometheus discovery
+x-pmoves-labels: &pmoves-labels
+  labels:
+    - "pmoves.service=true"
+    - "prometheus.io/scrape=true"
+    - "prometheus.io/port=9090"
+    - "prometheus.io/path=/metrics"
+
+# Example service definition using the templates:
+#
+# services:
+#   my-api-service:
+#     <<: [*env-tier-api, *pmoves-healthcheck, *pmoves-labels]
+#     image: ghcr.io/powerfulmoves/my-service:latest
+#     ports:
+#       - "8080:8080"
+#     environment:
+#       SERVICE_NAME: my-api-service
+#       SERVICE_PORT: 8080
+#
+#   my-gpu-worker:
+#     <<: [*env-tier-worker, *pmoves-gpu-resource, *pmoves-healthcheck]
+#     image: ghcr.io/powerfulmoves/my-gpu-worker:latest
+#     environment:
+#       SERVICE_NAME: my-gpu-worker
+#       CUDA_VISIBLE_DEVICES: 0
