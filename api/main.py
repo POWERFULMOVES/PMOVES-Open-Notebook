@@ -34,6 +34,7 @@ from api.routers import (
 )
 from api.routers import commands as commands_router
 from open_notebook.database.async_migrate import AsyncMigrationManager
+from pmoves_health import health_check_router
 
 # Import commands to register them in the API process
 try:
@@ -95,6 +96,7 @@ app.add_middleware(
     excluded_paths=[
         "/",
         "/health",
+        "/healthz",
         "/docs",
         "/openapi.json",
         "/redoc",
@@ -162,6 +164,7 @@ app.include_router(episode_profiles.router, prefix="/api", tags=["episode-profil
 app.include_router(speaker_profiles.router, prefix="/api", tags=["speaker-profiles"])
 app.include_router(chat.router, prefix="/api", tags=["chat"])
 app.include_router(source_chat.router, prefix="/api", tags=["source-chat"])
+app.include_router(health_check_router)
 
 
 @app.get("/")
