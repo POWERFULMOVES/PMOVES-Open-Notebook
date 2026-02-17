@@ -25,9 +25,12 @@ class PasswordAuthMiddleware(BaseHTTPMiddleware):
         ]
 
     async def dispatch(self, request: Request, call_next):
-        # Skip authentication if no password is set
+        # Fail-closed: if no password is configured, deny all requests
         if not self.password:
-            return await call_next(request)
+            return JSONResponse(
+                status_code=500,
+                content={"detail": "OPEN_NOTEBOOK_PASSWORD not configured — authentication unavailable"},
+            )
 
         # Skip authentication for excluded paths
         if request.url.path in self.excluded_paths:
@@ -85,9 +88,12 @@ def check_api_password(
     """
     password = os.environ.get("OPEN_NOTEBOOK_PASSWORD")
 
-    # No password set, allow access
+    # Fail-closed: if no password is configured, deny access
     if not password:
-        return True
+        raise HTTPException(
+            status_code=500,
+            detail="OPEN_NOTEBOOK_PASSWORD not configured — authentication unavailable",
+        )
 
     # No credentials provided
     if not credentials:
