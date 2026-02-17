@@ -29,7 +29,7 @@ Usage:
 
     # Or use the checker directly
     checker = HealthChecker("my-service")
-    checker.nats("nats://nats:4222")
+    checker.nats("nats://nats:pmoves@nats:4222")
     status = await checker.check_all()
 
 Health Status Values:
