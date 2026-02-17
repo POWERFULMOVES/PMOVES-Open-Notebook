@@ -4,9 +4,9 @@ from langchain_core.runnables import RunnableConfig
 from langgraph.graph import END, START, StateGraph
 from typing_extensions import TypedDict
 
+from open_notebook.ai.provision import provision_langchain_model
 from open_notebook.domain.notebook import Source
 from open_notebook.domain.transformation import DefaultPrompts, Transformation
-from open_notebook.graphs.utils import provision_langchain_model
 from open_notebook.utils import clean_thinking_content
 
 
@@ -47,7 +47,9 @@ async def run_transformation(state: dict, config: RunnableConfig) -> dict:
     response = await chain.ainvoke(payload)
 
     # Clean thinking content from the response
-    response_content = response.content if isinstance(response.content, str) else str(response.content)
+    response_content = (
+        response.content if isinstance(response.content, str) else str(response.content)
+    )
     cleaned_content = clean_thinking_content(response_content)
 
     if source:

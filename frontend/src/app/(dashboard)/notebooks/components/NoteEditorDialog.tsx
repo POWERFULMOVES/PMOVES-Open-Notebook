@@ -1,7 +1,7 @@
 'use client'
 
 import { Controller, useForm, useWatch } from 'react-hook-form'
-import { useEffect } from 'react'
+import { useEffect, useState } from 'react'
 import { useQueryClient } from '@tanstack/react-query'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { z } from 'zod'
@@ -11,6 +11,8 @@ import { useCreateNote, useUpdateNote, useNote } from '@/lib/hooks/use-notes'
 import { QUERY_KEYS } from '@/lib/api/query-client'
 import { MarkdownEditor } from '@/components/ui/markdown-editor'
 import { InlineEdit } from '@/components/common/InlineEdit'
+import { cn } from "@/lib/utils";
+import { useTranslation } from '@/lib/hooks/use-translation'
 
 const createNoteSchema = z.object({
   title: z.string().optional(),
@@ -27,6 +29,7 @@ interface NoteEditorDialogProps {
 }
 
 export function NoteEditorDialog({ open, onOpenChange, notebookId, note }: NoteEditorDialogProps) {
+  const { t } = useTranslation()
   const createNote = useCreateNote()
   const updateNote = useUpdateNote()
   const queryClient = useQueryClient()
@@ -53,6 +56,7 @@ export function NoteEditorDialog({ open, onOpenChange, notebookId, note }: NoteE
     },
   })
   const watchTitle = useWatch({ control, name: 'title' })
+  const [isEditorFullscreen, setIsEditorFullscreen] = useState(false)
 
   useEffect(() => {
     if (!open) {
@@ -66,6 +70,16 @@ export function NoteEditorDialog({ open, onOpenChange, notebookId, note }: NoteE
 
     reset({ title, content })
   }, [open, note, fetchedNote, reset])
+
+  useEffect(() => {
+    if (!open) return
+
+    const observer = new MutationObserver(() => {
+      setIsEditorFullscreen(!!document.querySelector('.w-md-editor-fullscreen'))
+    })
+    observer.observe(document.body, { subtree: true, attributes: true, attributeFilter: ['class'] })
+    return () => observer.disconnect()
+  }, [open])
 
   const onSubmit = async (data: CreateNoteFormData) => {
     if (note) {
@@ -99,45 +113,58 @@ export function NoteEditorDialog({ open, onOpenChange, notebookId, note }: NoteE
 
   const handleClose = () => {
     reset()
+    setIsEditorFullscreen(false)
     onOpenChange(false)
   }
 
   return (
     <Dialog open={open} onOpenChange={handleClose}>
-      <DialogContent className="sm:max-w-3xl w-full max-h-[90vh] overflow-hidden p-0">
+      <DialogContent className={cn(
+          "sm:max-w-3xl w-full max-h-[90vh] overflow-hidden p-0",
+          isEditorFullscreen && "!max-w-screen !max-h-screen border-none w-screen h-screen"
+      )}>
         <DialogTitle className="sr-only">
-          {isEditing ? 'Edit note' : 'Create note'}
+          {isEditing ? t.sources.editNote : t.sources.createNote}
         </DialogTitle>
         <form onSubmit={handleSubmit(onSubmit)} className="flex h-full flex-col">
           {isEditing && noteLoading ? (
             <div className="flex-1 flex items-center justify-center py-10">
-              <span className="text-sm text-muted-foreground">Loading note…</span>
+              <span className="text-sm text-muted-foreground">{t.common.loading}</span>
             </div>
           ) : (
             <>
               <div className="border-b px-6 py-4">
                 <InlineEdit
+                  id="note-title"
+                  name="title"
                   value={watchTitle ?? ''}
                   onSave={(value) => setValue('title', value || '')}
-                  placeholder="Add a title..."
-                  emptyText="Untitled Note"
+                  placeholder={t.sources.addTitle}
+                  emptyText={t.sources.untitledNote}
                   className="text-xl font-semibold"
                   inputClassName="text-xl font-semibold"
                 />
               </div>
 
-              <div className="flex-1 overflow-y-auto px-6 py-4">
+              <div className={cn(
+                  "flex-1 overflow-y-auto",
+                  !isEditorFullscreen && "px-6 py-4")
+              }>
                 <Controller
                   control={control}
                   name="content"
                   render={({ field }) => (
                     <MarkdownEditor
                       key={note?.id ?? 'new'}
+                      textareaId="note-content"
                       value={field.value}
                       onChange={field.onChange}
                       height={420}
-                      placeholder="Write your note content here..."
-                      className="rounded-md border"
+                      placeholder={t.sources.writeNotePlaceholder}
+                      className={cn(
+                          "w-full h-full min-h-[420px] [&_.w-md-editor]:!static [&_.w-md-editor]:!w-full [&_.w-md-editor]:!h-full",
+                          !isEditorFullscreen && "rounded-md border"
+                      )}
                     />
                   )}
                 />
@@ -150,17 +177,17 @@ export function NoteEditorDialog({ open, onOpenChange, notebookId, note }: NoteE
 
           <div className="border-t px-6 py-4 flex justify-end gap-2">
             <Button type="button" variant="outline" onClick={handleClose}>
-              Cancel
+              {t.common.cancel}
             </Button>
-            <Button 
-              type="submit" 
+            <Button
+              type="submit"
               disabled={isSaving || (isEditing && noteLoading)}
             >
               {isSaving
-                ? isEditing ? 'Saving...' : 'Creating...'
+                ? isEditing ? `${t.common.saving}...` : `${t.common.creating}...`
                 : isEditing
-                  ? 'Save Note'
-                  : 'Create Note'}
+                  ? t.sources.saveNote
+                  : t.sources.createNoteBtn}
             </Button>
           </div>
         </form>

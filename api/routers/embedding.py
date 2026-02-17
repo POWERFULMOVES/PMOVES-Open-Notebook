@@ -3,7 +3,7 @@ from loguru import logger
 
 from api.command_service import CommandService
 from api.models import EmbedRequest, EmbedResponse
-from open_notebook.domain.models import model_manager
+from open_notebook.ai.models import model_manager
 from open_notebook.domain.notebook import Note, Source
 
 router = APIRouter()
@@ -38,14 +38,21 @@ async def embed_content(embed_request: EmbedRequest):
                 # Import commands to ensure they're registered
                 import commands.embedding_commands  # noqa: F401
 
-                # Submit command
+                # Submit type-specific command
+                if item_type == "source":
+                    command_name = "embed_source"
+                    command_input = {"source_id": item_id}
+                else:  # note
+                    command_name = "embed_note"
+                    command_input = {"note_id": item_id}
+
                 command_id = await CommandService.submit_command_job(
-                    "open_notebook",  # app name
-                    "embed_single_item",  # command name
-                    {"item_id": item_id, "item_type": item_type},
+                    "open_notebook",
+                    command_name,
+                    command_input,
                 )
 
-                logger.info(f"Submitted async embedding command: {command_id}")
+                logger.info(f"Submitted async {command_name} command: {command_id}")
 
                 return EmbedResponse(
                     success=True,
@@ -62,29 +69,37 @@ async def embed_content(embed_request: EmbedRequest):
                 )
 
         else:
-            # SYNC PATH: Execute synchronously (existing behavior)
-            logger.info(f"Using sync processing for {item_type} {item_id}")
+            # DOMAIN MODEL PATH: Submit job via domain model convenience methods
+            # These methods internally call submit_command() - still fire-and-forget
+            logger.info(f"Using domain model path for {item_type} {item_id}")
 
-            # Get the item and embed it
+            command_id = None
+
+            # Get the item and submit embedding job
             if item_type == "source":
                 source_item = await Source.get(item_id)
                 if not source_item:
                     raise HTTPException(status_code=404, detail="Source not found")
 
-                # Perform embedding (vectorize is now idempotent - safe to call multiple times)
-                await source_item.vectorize()
-                message = "Source embedded successfully"
+                # Submit embed_source job (returns command_id for tracking)
+                command_id = await source_item.vectorize()
+                message = "Source embedding job submitted"
 
             elif item_type == "note":
                 note_item = await Note.get(item_id)
                 if not note_item:
                     raise HTTPException(status_code=404, detail="Note not found")
 
-                await note_item.save()  # Auto-embeds via ObjectModel.save()
-                message = "Note embedded successfully"
+                # Note.save() internally submits embed_note command and returns command_id
+                command_id = await note_item.save()
+                message = "Note embedding job submitted"
 
             return EmbedResponse(
-                success=True, message=message, item_id=item_id, item_type=item_type, command_id=None
+                success=True,
+                message=message,
+                item_id=item_id,
+                item_type=item_type,
+                command_id=command_id,
             )
 
     except HTTPException:

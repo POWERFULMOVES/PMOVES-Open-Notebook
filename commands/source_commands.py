@@ -44,7 +44,18 @@ class SourceProcessingOutput(CommandOutput):
     error_message: Optional[str] = None
 
 
-@command("process_source", app="open_notebook")
+@command(
+    "process_source",
+    app="open_notebook",
+    retry={
+        "max_attempts": 15,  # Increased from 5 to handle deep queues (workaround for SurrealDB v2 transaction conflicts)
+        "wait_strategy": "exponential_jitter",
+        "wait_min": 1,
+        "wait_max": 120,  # Increased from 30s to 120s to allow queue to drain
+        "retry_on": [RuntimeError],
+        "retry_log_level": "debug",  # Use debug level to avoid log noise during transaction conflicts
+    },
+)
 async def process_source_command(
     input_data: SourceProcessingInput,
 ) -> SourceProcessingOutput:
@@ -124,10 +135,15 @@ async def process_source_command(
             processing_time=processing_time,
         )
 
+    except RuntimeError as e:
+        # Transaction conflicts should be retried by surreal-commands
+        logger.debug(f"Transaction conflict, will retry: {e}")
+        raise
+
     except Exception as e:
+        # Other errors are permanent failures
         processing_time = time.time() - start_time
         logger.error(f"Source processing failed: {e}")
-        logger.exception(e)
 
         return SourceProcessingOutput(
             success=False,

@@ -1,3 +1,4 @@
+import asyncio
 import os
 from pathlib import Path
 from typing import Any, List, Optional
@@ -113,7 +114,7 @@ def parse_source_form_data(
         try:
             notebooks_list = json.loads(notebooks)
         except json.JSONDecodeError:
-            logger.error(f"DEBUG - Invalid JSON in notebooks field: {notebooks}")
+            logger.error(f"Invalid JSON in notebooks field: {notebooks}")
             raise ValueError("Invalid JSON in notebooks field")
 
     transformations_list = []
@@ -121,9 +122,7 @@ def parse_source_form_data(
         try:
             transformations_list = json.loads(transformations)
         except json.JSONDecodeError:
-            logger.error(
-                f"DEBUG - Invalid JSON in transformations field: {transformations}"
-            )
+            logger.error(f"Invalid JSON in transformations field: {transformations}")
             raise ValueError("Invalid JSON in transformations field")
 
     # Create SourceCreate instance
@@ -152,18 +151,26 @@ def parse_source_form_data(
 @router.get("/sources", response_model=List[SourceListResponse])
 async def get_sources(
     notebook_id: Optional[str] = Query(None, description="Filter by notebook ID"),
-    limit: int = Query(50, ge=1, le=100, description="Number of sources to return (1-100)"),
+    limit: int = Query(
+        50, ge=1, le=100, description="Number of sources to return (1-100)"
+    ),
     offset: int = Query(0, ge=0, description="Number of sources to skip"),
-    sort_by: str = Query("updated", description="Field to sort by (created or updated)"),
+    sort_by: str = Query(
+        "updated", description="Field to sort by (created or updated)"
+    ),
     sort_order: str = Query("desc", description="Sort order (asc or desc)"),
 ):
     """Get sources with pagination and sorting support."""
     try:
         # Validate sort parameters
         if sort_by not in ["created", "updated"]:
-            raise HTTPException(status_code=400, detail="sort_by must be 'created' or 'updated'")
+            raise HTTPException(
+                status_code=400, detail="sort_by must be 'created' or 'updated'"
+            )
         if sort_order.lower() not in ["asc", "desc"]:
-            raise HTTPException(status_code=400, detail="sort_order must be 'asc' or 'desc'")
+            raise HTTPException(
+                status_code=400, detail="sort_order must be 'asc' or 'desc'"
+            )
 
         # Build ORDER BY clause
         order_clause = f"ORDER BY {sort_by} {sort_order.upper()}"
@@ -175,112 +182,65 @@ async def get_sources(
             if not notebook:
                 raise HTTPException(status_code=404, detail="Notebook not found")
 
-            # Query sources for specific notebook - include command field
+            # Query sources for specific notebook - include command field with FETCH
             query = f"""
                 SELECT id, asset, created, title, updated, topics, command,
                 (SELECT VALUE count() FROM source_insight WHERE source = $parent.id GROUP ALL)[0].count OR 0 AS insights_count,
-                ((SELECT VALUE id FROM source_embedding WHERE source = $parent.id LIMIT 1)) != NONE AS embedded
+                (SELECT VALUE id FROM source_embedding WHERE source = $parent.id LIMIT 1) != [] AS embedded
                 FROM (select value in from reference where out=$notebook_id)
                 {order_clause}
                 LIMIT $limit START $offset
+                FETCH command
             """
             result = await repo_query(
-                query, {
+                query,
+                {
                     "notebook_id": ensure_record_id(notebook_id),
                     "limit": limit,
-                    "offset": offset
-                }
+                    "offset": offset,
+                },
             )
         else:
-            # Query all sources - include command field
+            # Query all sources - include command field with FETCH
             query = f"""
                 SELECT id, asset, created, title, updated, topics, command,
                 (SELECT VALUE count() FROM source_insight WHERE source = $parent.id GROUP ALL)[0].count OR 0 AS insights_count,
-                ((SELECT VALUE id FROM source_embedding WHERE source = $parent.id LIMIT 1)) != NONE AS embedded
+                (SELECT VALUE id FROM source_embedding WHERE source = $parent.id LIMIT 1) != [] AS embedded
                 FROM source
                 {order_clause}
                 LIMIT $limit START $offset
+                FETCH command
             """
             result = await repo_query(query, {"limit": limit, "offset": offset})
 
-        # Extract command IDs for batch status fetching
-        command_ids = []
-        command_to_source = {}
-
-        for row in result:
-            command = row.get("command")
-            if command:
-                command_str = str(command)
-                command_ids.append(command_str)
-                command_to_source[command_str] = row["id"]
-
-        # Batch fetch command statuses
-        command_statuses = {}
-        if command_ids:
-            try:
-                # Get status for all commands in batch (if the library supports it)
-                # If not, we'll fall back to individual calls, but limit concurrent requests
-                import asyncio
-
-                from surreal_commands import get_command_status
-
-                async def get_status_safe(command_id: str):
-                    try:
-                        status = await get_command_status(command_id)
-                        return (command_id, status)
-                    except Exception as e:
-                        logger.warning(
-                            f"Failed to get status for command {command_id}: {e}"
-                        )
-                        return (command_id, None)
-
-                # Limit concurrent requests to avoid overwhelming the command service
-                semaphore = asyncio.Semaphore(10)
-
-                async def get_status_with_limit(command_id: str):
-                    async with semaphore:
-                        return await get_status_safe(command_id)
-
-                # Fetch statuses concurrently but with limit
-                status_tasks = [get_status_with_limit(cmd_id) for cmd_id in command_ids]
-                status_results = await asyncio.gather(
-                    *status_tasks, return_exceptions=True
-                )
-
-                # Process results
-                for result_item in status_results:
-                    if isinstance(result_item, Exception):
-                        continue
-                    if isinstance(result_item, tuple) and len(result_item) == 2:
-                        cmd_id, status = result_item
-                        command_statuses[cmd_id] = status
-
-            except Exception as e:
-                logger.warning(f"Failed to batch fetch command statuses: {e}")
-
         # Convert result to response model
+        # Command data is already fetched via FETCH command clause
         response_list = []
         for row in result:
             command = row.get("command")
-            command_id = str(command) if command else None
+            command_id = None
             status = None
             processing_info = None
 
-            # Get status information if command exists
-            if command_id and command_id in command_statuses:
-                status_obj = command_statuses[command_id]
-                if status_obj:
-                    status = status_obj.status
-                    # Extract execution metadata from nested result structure
-                    result_data: dict[str, Any] | None = getattr(status_obj, "result", None)
-                    execution_metadata: dict[str, Any] = result_data.get("execution_metadata", {}) if isinstance(result_data, dict) else {}
-                    processing_info = {
-                        "started_at": execution_metadata.get("started_at"),
-                        "completed_at": execution_metadata.get("completed_at"),
-                        "error": getattr(status_obj, "error_message", None),
-                    }
-            elif command_id:
-                # Command exists but status couldn't be fetched
+            # Extract status from fetched command object (already resolved by FETCH)
+            if command and isinstance(command, dict):
+                command_id = str(command.get("id")) if command.get("id") else None
+                status = command.get("status")
+                # Extract execution metadata from nested result structure
+                result_data = command.get("result")
+                execution_metadata = (
+                    result_data.get("execution_metadata", {})
+                    if isinstance(result_data, dict)
+                    else {}
+                )
+                processing_info = {
+                    "started_at": execution_metadata.get("started_at"),
+                    "completed_at": execution_metadata.get("completed_at"),
+                    "error": command.get("error_message"),
+                }
+            elif command:
+                # Command exists but FETCH failed to resolve it (broken reference)
+                command_id = str(command)
                 status = "unknown"
 
             response_list.append(
@@ -297,11 +257,11 @@ async def get_sources(
                     if row.get("asset")
                     else None,
                     embedded=row.get("embedded", False),
-                    embedded_chunks=0,  # Removed from query - not needed in list view
+                    embedded_chunks=0,  # Not needed in list view
                     insights_count=row.get("insights_count", 0),
                     created=str(row["created"]),
                     updated=str(row["updated"]),
-                    # Status fields
+                    # Status fields from fetched command
                     command_id=command_id,
                     status=status,
                     processing_info=processing_info,
@@ -325,9 +285,12 @@ async def create_source(
     """Create a new source with support for both JSON and multipart form data."""
     source_data, upload_file = form_data
 
+    # Initialize file_path before try block so exception handlers can reference it
+    file_path = None
+
     try:
         # Verify all specified notebooks exist (backward compatibility support)
-        for notebook_id in (source_data.notebooks or []):
+        for notebook_id in source_data.notebooks or []:
             notebook = await Notebook.get(notebook_id)
             if not notebook:
                 raise HTTPException(
@@ -335,7 +298,6 @@ async def create_source(
                 )
 
         # Handle file upload if provided
-        file_path = None
         if upload_file and source_data.type == "upload":
             try:
                 file_path = await save_uploaded_file(upload_file)
@@ -399,7 +361,7 @@ async def create_source(
 
             # Add source to notebooks immediately so it appears in the UI
             # The source_graph will skip adding duplicates
-            for notebook_id in (source_data.notebooks or []):
+            for notebook_id in source_data.notebooks or []:
                 await source.add_to_notebook(notebook_id)
 
             try:
@@ -478,7 +440,7 @@ async def create_source(
 
                 # Add source to notebooks immediately so it appears in the UI
                 # The source_graph will skip adding duplicates
-                for notebook_id in (source_data.notebooks or []):
+                for notebook_id in source_data.notebooks or []:
                     await source.add_to_notebook(notebook_id)
 
                 # Execute command synchronously
@@ -490,11 +452,15 @@ async def create_source(
                     embed=source_data.embed,
                 )
 
-                result = execute_command_sync(
+                # Run in thread pool to avoid blocking the event loop
+                # execute_command_sync uses asyncio.run() internally which can't
+                # be called from an already-running event loop (FastAPI)
+                result = await asyncio.to_thread(
+                    execute_command_sync,
                     "open_notebook",  # app name
                     "process_source",  # command name
                     command_input.model_dump(),
-                    timeout=300,  # 5 minute timeout for sync processing
+                    300,  # 5 minute timeout for sync processing
                 )
 
                 if not result.is_success():
@@ -517,9 +483,7 @@ async def create_source(
 
                 # Get the processed source
                 if not source.id:
-                    raise HTTPException(
-                        status_code=500, detail="Source ID is missing"
-                    )
+                    raise HTTPException(status_code=500, detail="Source ID is missing")
                 processed_source = await Source.get(source.id)
                 if not processed_source:
                     raise HTTPException(
@@ -657,9 +621,11 @@ async def get_source(source_id: str):
         # Get associated notebooks
         notebooks_query = await repo_query(
             "SELECT VALUE out FROM reference WHERE in = $source_id",
-            {"source_id": ensure_record_id(source.id or source_id)}
+            {"source_id": ensure_record_id(source.id or source_id)},
         )
-        notebook_ids = [str(nb_id) for nb_id in notebooks_query] if notebooks_query else []
+        notebook_ids = (
+            [str(nb_id) for nb_id in notebooks_query] if notebooks_query else []
+        )
 
         return SourceResponse(
             id=source.id or "",

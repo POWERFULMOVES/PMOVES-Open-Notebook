@@ -7,45 +7,11 @@ import re
 import unicodedata
 from typing import Tuple
 
-from langchain_text_splitters import RecursiveCharacterTextSplitter
-
-from .token_utils import token_count
-
-# Pattern for matching thinking content in AI responses
+# Patterns for matching thinking content in AI responses
+# Standard pattern: <think>...</think>
 THINK_PATTERN = re.compile(r"<think>(.*?)</think>", re.DOTALL)
-
-
-def split_text(txt: str, chunk_size=500):
-    """
-    Split the input text into chunks.
-
-    Args:
-        txt (str): The input text to be split.
-        chunk_size (int): The size of each chunk. Default is 500.
-
-    Returns:
-        list: A list of text chunks.
-    """
-    overlap = int(chunk_size * 0.15)
-    text_splitter = RecursiveCharacterTextSplitter(
-        chunk_size=chunk_size,
-        chunk_overlap=overlap,
-        length_function=token_count,
-        separators=[
-            "\n\n",
-            "\n",
-            ".",
-            ",",
-            " ",
-            "\u200b",  # Zero-width space
-            "\uff0c",  # Fullwidth comma
-            "\u3001",  # Ideographic comma
-            "\uff0e",  # Fullwidth full stop
-            "\u3002",  # Ideographic full stop
-            "",
-        ],
-    )
-    return text_splitter.split_text(txt)
+# Pattern for malformed output: content</think> (missing opening tag)
+THINK_PATTERN_NO_OPEN = re.compile(r"^(.*?)</think>", re.DOTALL)
 
 
 def remove_non_ascii(text: str) -> str:
@@ -77,6 +43,9 @@ def parse_thinking_content(content: str) -> Tuple[str, str]:
     """
     Parse message content to extract thinking content from <think> tags.
 
+    Handles both well-formed tags and malformed output where the opening
+    <think> tag is missing but </think> is present.
+
     Args:
         content (str): The original message content
 
@@ -101,22 +70,31 @@ def parse_thinking_content(content: str) -> Tuple[str, str]:
     if len(content) > 100000:
         return "", content
 
-    # Find all thinking blocks
+    # Find all well-formed thinking blocks
     thinking_matches = THINK_PATTERN.findall(content)
 
-    if not thinking_matches:
-        return "", content
+    if thinking_matches:
+        # Join all thinking content with double newlines
+        thinking_content = "\n\n".join(match.strip() for match in thinking_matches)
 
-    # Join all thinking content with double newlines
-    thinking_content = "\n\n".join(match.strip() for match in thinking_matches)
+        # Remove all <think>...</think> blocks from the original content
+        cleaned_content = THINK_PATTERN.sub("", content)
 
-    # Remove all <think>...</think> blocks from the original content
-    cleaned_content = THINK_PATTERN.sub("", content)
+        # Clean up extra whitespace
+        cleaned_content = re.sub(r"\n\s*\n\s*\n", "\n\n", cleaned_content).strip()
 
-    # Clean up extra whitespace
-    cleaned_content = re.sub(r"\n\s*\n\s*\n", "\n\n", cleaned_content).strip()
+        return thinking_content, cleaned_content
 
-    return thinking_content, cleaned_content
+    # Handle malformed output: content</think> (missing opening tag)
+    # Some models like Nemotron output thinking without the opening <think> tag
+    malformed_match = THINK_PATTERN_NO_OPEN.match(content)
+    if malformed_match:
+        thinking_content = malformed_match.group(1).strip()
+        # Remove the thinking content and </think> tag
+        cleaned_content = content[malformed_match.end() :].strip()
+        return thinking_content, cleaned_content
+
+    return "", content
 
 
 def clean_thinking_content(content: str) -> str:

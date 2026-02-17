@@ -6,9 +6,11 @@ COPY --from=ghcr.io/astral-sh/uv:latest /uv /uvx /bin/
 
 # Install system dependencies required for building certain Python packages
 # Add Node.js 20.x LTS for building frontend
-RUN apt-get update && apt-get upgrade -y && apt-get install -y \
-    gcc g++ git make \
+# NOTE: gcc/g++/make removed - uv should download pre-built wheels. Add back if build fails.
+# NOTE: gcc/g++/make required for some python dependencies
+RUN apt-get update && apt-get install -y --no-install-recommends \
     curl \
+    build-essential \
     && curl -fsSL https://deb.nodesource.com/setup_20.x | bash - \
     && apt-get install -y nodejs \
     && rm -rf /var/lib/apt/lists/*
@@ -35,7 +37,11 @@ COPY . /app
 
 # Install frontend dependencies and build
 WORKDIR /app/frontend
+ARG NPM_REGISTRY=https://registry.npmjs.org/
+COPY frontend/package.json frontend/package-lock.json ./
+RUN npm config set registry ${NPM_REGISTRY}
 RUN npm ci
+COPY frontend/ ./
 RUN npm run build
 
 # Return to app root
@@ -44,9 +50,13 @@ WORKDIR /app
 # Runtime stage
 FROM python:3.12-slim-bookworm AS runtime
 
+# Security: Run as non-root user (PMOVES standard: UID/GID 1000)
+RUN groupadd -g 1000 -r opennotebook && \
+    useradd -u 1000 -r -g opennotebook -m -s /sbin/nologin -c "Open Notebook user" opennotebook
+
 # Install only runtime system dependencies (no build tools)
 # Add Node.js 20.x LTS for running frontend
-RUN apt-get update && apt-get upgrade -y && apt-get install -y \
+RUN apt-get update && apt-get install -y --no-install-recommends \
     ffmpeg \
     supervisor \
     curl \
@@ -61,26 +71,39 @@ COPY --from=ghcr.io/astral-sh/uv:latest /uv /uvx /bin/
 WORKDIR /app
 
 # Copy the virtual environment from builder stage
-COPY --from=builder /app/.venv /app/.venv
+COPY --from=builder --chown=opennotebook:opennotebook /app/.venv /app/.venv
 
-# Copy the application code
-COPY --from=builder /app /app
+# Copy the source code (the rest) - security: owned by non-root user
+COPY --from=builder --chown=opennotebook:opennotebook /app /app
 
-# Copy built frontend from builder stage
-COPY --from=builder /app/frontend/.next/standalone /app/frontend/
-COPY --from=builder /app/frontend/.next/static /app/frontend/.next/static
-COPY --from=builder /app/frontend/public /app/frontend/public
+# Ensure uv uses the existing venv without attempting network operations
+ENV UV_NO_SYNC=1
+ENV VIRTUAL_ENV=/app/.venv
+
+# Copy built frontend from builder stage - security: owned by non-root user
+COPY --from=builder --chown=opennotebook:opennotebook /app/frontend/.next/standalone /app/frontend/
+COPY --from=builder --chown=opennotebook:opennotebook /app/frontend/.next/static /app/frontend/.next/static
+COPY --from=builder --chown=opennotebook:opennotebook /app/frontend/public /app/frontend/public
+COPY --from=builder --chown=opennotebook:opennotebook /app/frontend/start-server.js /app/frontend/start-server.js
 
 # Expose ports for Frontend and API
 EXPOSE 8502 5055
 
 RUN mkdir -p /app/data
 
+# Copy and make executable the wait-for-api script
+COPY scripts/wait-for-api.sh /app/scripts/wait-for-api.sh
+RUN chmod +x /app/scripts/wait-for-api.sh
+
 # Copy supervisord configuration
 COPY supervisord.conf /etc/supervisor/conf.d/supervisord.conf
 
-# Create log directories
-RUN mkdir -p /var/log/supervisor
+# Create log directories with proper permissions - security: owned by non-root user
+RUN mkdir -p /var/log/supervisor && \
+    chown -R opennotebook:opennotebook /var/log/supervisor /app/data
+
+# Switch to non-root user
+USER opennotebook
 
 # Runtime API URL Configuration
 # The API_URL environment variable can be set at container runtime to configure

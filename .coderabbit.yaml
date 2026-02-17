@@ -1,0 +1,11 @@
+# CodeRabbit Configuration for PMOVES Submodule
+reviews:
+  review_status: true
+  branches:
+    - "main"
+    - "feat/*"
+    - "fix/*"
+  excluded_branches:
+    - "origin/main"
+language: "en-US"
+  doc_target_coverage: 80

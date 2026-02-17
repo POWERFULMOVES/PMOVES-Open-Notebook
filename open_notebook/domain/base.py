@@ -2,7 +2,13 @@ from datetime import datetime
 from typing import Any, ClassVar, Dict, List, Optional, Type, TypeVar, Union, cast
 
 from loguru import logger
-from pydantic import BaseModel, ValidationError, field_validator, model_validator
+from pydantic import (
+    BaseModel,
+    ConfigDict,
+    ValidationError,
+    field_validator,
+    model_validator,
+)
 
 from open_notebook.database.repository import (
     ensure_record_id,
@@ -25,6 +31,7 @@ T = TypeVar("T", bound="ObjectModel")
 class ObjectModel(BaseModel):
     id: Optional[str] = None
     table_name: ClassVar[str] = ""
+    nullable_fields: ClassVar[set[str]] = set()  # Fields that can be saved as None
     created: Optional[datetime] = None
     updated: Optional[datetime] = None
 
@@ -103,33 +110,18 @@ class ObjectModel(BaseModel):
                 return subclass
         return None
 
-    def needs_embedding(self) -> bool:
-        return False
-
-    def get_embedding_content(self) -> Optional[str]:
-        return None
-
     async def save(self) -> None:
-        from open_notebook.domain.models import model_manager
+        """
+        Save the model to the database.
 
+        Note: Embedding is no longer generated inline. Subclasses that need
+        embedding should override save() to submit the appropriate embed_*
+        command after calling super().save().
+        """
         try:
             self.model_validate(self.model_dump(), strict=True)
             data = self._prepare_save_data()
             data["updated"] = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-
-            if self.needs_embedding():
-                embedding_content = self.get_embedding_content()
-                if embedding_content:
-                    EMBEDDING_MODEL = await model_manager.get_embedding_model()
-                    if not EMBEDDING_MODEL:
-                        logger.warning(
-                            "No embedding model found. Content will not be searchable."
-                        )
-                    data["embedding"] = (
-                        (await EMBEDDING_MODEL.aembed([embedding_content]))[0]
-                        if EMBEDDING_MODEL
-                        else []
-                    )
 
             repo_result: Union[List[Dict[str, Any]], Dict[str, Any]]
             if self.id is None:
@@ -147,7 +139,9 @@ class ObjectModel(BaseModel):
                 )
             # Update the current instance with the result
             # repo_result is a list of dictionaries
-            result_list: List[Dict[str, Any]] = repo_result if isinstance(repo_result, list) else [repo_result]
+            result_list: List[Dict[str, Any]] = (
+                repo_result if isinstance(repo_result, list) else [repo_result]
+            )
             for key, value in result_list[0].items():
                 if hasattr(self, key):
                     if isinstance(getattr(self, key), BaseModel):
@@ -158,13 +152,20 @@ class ObjectModel(BaseModel):
         except ValidationError as e:
             logger.error(f"Validation failed: {e}")
             raise
+        except RuntimeError:
+            # Transaction conflicts should propagate for retry
+            raise
         except Exception as e:
             logger.error(f"Error saving record: {e}")
             raise DatabaseOperationError(e)
 
     def _prepare_save_data(self) -> Dict[str, Any]:
         data = self.model_dump()
-        return {key: value for key, value in data.items() if value is not None}
+        return {
+            key: value
+            for key, value in data.items()
+            if value is not None or key in self.__class__.nullable_fields
+        }
 
     async def delete(self) -> bool:
         if self.id is None:
@@ -203,18 +204,19 @@ class ObjectModel(BaseModel):
 
 
 class RecordModel(BaseModel):
+    model_config = ConfigDict(
+        validate_assignment=True,
+        arbitrary_types_allowed=True,
+        extra="allow",
+        from_attributes=True,
+        defer_build=True,
+    )
+
     record_id: ClassVar[str]
     auto_save: ClassVar[bool] = (
         False  # Default to False, can be overridden in subclasses
     )
     _instances: ClassVar[Dict[str, "RecordModel"]] = {}  # Store instances by record_id
-
-    class Config:
-        validate_assignment = True
-        arbitrary_types_allowed = True
-        extra = "allow"
-        from_attributes = True
-        defer_build = True
 
     def __new__(cls, **kwargs):
         # If an instance already exists for this record_id, return it

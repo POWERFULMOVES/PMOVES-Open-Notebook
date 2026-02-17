@@ -5,16 +5,20 @@ This test suite focuses on validation logic, business rules, and data structures
 that can be tested without database mocking.
 """
 
+import tempfile
+from pathlib import Path
+from unittest.mock import AsyncMock, patch
+
 import pytest
 from pydantic import ValidationError
 
+from open_notebook.ai.models import ModelManager
 from open_notebook.domain.base import RecordModel
 from open_notebook.domain.content_settings import ContentSettings
-from open_notebook.domain.models import ModelManager
-from open_notebook.domain.notebook import Note, Notebook, Source
-from open_notebook.domain.podcast import EpisodeProfile, SpeakerProfile
+from open_notebook.domain.notebook import Asset, Note, Notebook, Source
 from open_notebook.domain.transformation import Transformation
 from open_notebook.exceptions import InvalidInputError
+from open_notebook.podcasts.models import EpisodeProfile, SpeakerProfile
 
 # ============================================================================
 # TEST SUITE 1: RecordModel Singleton Pattern
@@ -48,20 +52,21 @@ class TestRecordModelSingleton:
 
 
 # ============================================================================
-# TEST SUITE 2: ModelManager Singleton
+# TEST SUITE 2: ModelManager Instance Isolation
 # ============================================================================
 
 
 class TestModelManager:
-    """Test suite for ModelManager singleton pattern."""
+    """Test suite for ModelManager instance behavior."""
 
-    def test_model_manager_singleton(self):
-        """Test ModelManager implements singleton pattern correctly."""
+    def test_model_manager_instance_isolation(self):
+        """Test that each ModelManager instance is independent (not a singleton)."""
         manager1 = ModelManager()
         manager2 = ModelManager()
 
-        assert manager1 is manager2
-        assert id(manager1) == id(manager2)
+        # Each instance should be independent (not a singleton)
+        assert manager1 is not manager2
+        assert id(manager1) != id(manager2)
 
 
 # ============================================================================
@@ -118,6 +123,84 @@ class TestSourceDomain:
         save_data = source3._prepare_save_data()
         assert "command" in save_data
 
+    @pytest.mark.asyncio
+    async def test_source_delete_cleans_up_file(self):
+        """Test that deleting a source removes the associated file."""
+        # Create a temporary file
+        with tempfile.NamedTemporaryFile(delete=False, suffix=".txt") as tmp_file:
+            tmp_file.write(b"Test content")
+            tmp_path = Path(tmp_file.name)
+
+        try:
+            # Create source with file asset
+            source = Source(
+                id="source:test_delete",
+                title="Test Source",
+                asset=Asset(file_path=str(tmp_path)),
+            )
+
+            # Verify file exists
+            assert tmp_path.exists()
+
+            # Mock the parent delete method to avoid database operations
+            with patch.object(
+                Source.__bases__[0], "delete", new_callable=AsyncMock
+            ) as mock_delete:
+                mock_delete.return_value = True
+
+                # Delete the source
+                result = await source.delete()
+
+                # Verify parent delete was called
+                mock_delete.assert_called_once()
+                assert result is True
+
+            # Verify file was deleted
+            assert not tmp_path.exists()
+
+        finally:
+            # Cleanup in case test fails
+            if tmp_path.exists():
+                tmp_path.unlink()
+
+    @pytest.mark.asyncio
+    async def test_source_delete_without_file(self):
+        """Test that deleting a source without a file doesn't fail."""
+        # Create source without file asset
+        source = Source(id="source:test_no_file", title="Test Source", asset=None)
+
+        # Mock the parent delete method
+        with patch.object(
+            Source.__bases__[0], "delete", new_callable=AsyncMock
+        ) as mock_delete:
+            mock_delete.return_value = True
+
+            # Delete should complete without error
+            result = await source.delete()
+            assert result is True
+            mock_delete.assert_called_once()
+
+    @pytest.mark.asyncio
+    async def test_source_delete_continues_on_file_error(self):
+        """Test that source deletion continues even if file deletion fails."""
+        # Create source with non-existent file
+        source = Source(
+            id="source:test_missing_file",
+            title="Test Source",
+            asset=Asset(file_path="/nonexistent/path/file.txt"),
+        )
+
+        # Mock the parent delete method
+        with patch.object(
+            Source.__bases__[0], "delete", new_callable=AsyncMock
+        ) as mock_delete:
+            mock_delete.return_value = True
+
+            # Delete should complete even though file doesn't exist
+            result = await source.delete()
+            assert result is True
+            mock_delete.assert_called_once()
+
 
 # ============================================================================
 # TEST SUITE 5: Note Domain
@@ -145,16 +228,18 @@ class TestNoteDomain:
         with pytest.raises(InvalidInputError, match="Note content cannot be empty"):
             Note(title="Test", content="   ")
 
-    def test_note_embedding_enabled(self):
-        """Test notes have embedding enabled by default."""
+    def test_note_content_for_embedding(self):
+        """Test notes can hold content for embedding.
+
+        Note: Embedding is now handled via command submission in Note.save(),
+        not via needs_embedding() method. This test verifies basic content handling.
+        """
         note = Note(title="Test", content="Test content")
+        assert note.content == "Test content"
 
-        assert note.needs_embedding() is True
-        assert note.get_embedding_content() == "Test content"
-
-        # Test with None content
+        # Test with None content - valid, no embedding will be submitted
         note2 = Note(title="Test", content=None)
-        assert note2.get_embedding_content() is None
+        assert note2.content is None
 
 
 # ============================================================================
@@ -191,7 +276,9 @@ class TestPodcastDomain:
                 name="Test",
                 tts_provider="openai",
                 tts_model="tts-1",
-                speakers=[{"name": "Speaker 1"}],  # Missing voice_id, backstory, personality
+                speakers=[
+                    {"name": "Speaker 1"}
+                ],  # Missing voice_id, backstory, personality
             )
 
         # Test valid - single speaker with all fields
@@ -264,7 +351,9 @@ class TestEpisodeProfile:
     def test_episode_profile_segment_validation(self):
         """Test segment count validation (3-20)."""
         # Test invalid - too few segments
-        with pytest.raises(ValidationError, match="Number of segments must be between 3 and 20"):
+        with pytest.raises(
+            ValidationError, match="Number of segments must be between 3 and 20"
+        ):
             EpisodeProfile(
                 name="Test",
                 speaker_config="default",
@@ -277,7 +366,9 @@ class TestEpisodeProfile:
             )
 
         # Test invalid - too many segments
-        with pytest.raises(ValidationError, match="Number of segments must be between 3 and 20"):
+        with pytest.raises(
+            ValidationError, match="Number of segments must be between 3 and 20"
+        ):
             EpisodeProfile(
                 name="Test",
                 speaker_config="default",
