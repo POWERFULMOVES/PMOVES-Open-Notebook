@@ -218,3 +218,12 @@ See dedicated CLAUDE.md files for detailed guidance:
 ---
 
 **Last Updated**: January 2026 | **Project Version**: 1.2.4+
+
+<!-- PMOVES.AI-CONTEXT-TAGS -->
+## PMOVES.AI Skill Hints
+
+**Primary Skills:** `/search:deepresearch`, `/db:query`, `/deploy:up`, `/health:quick`
+**Context Files:** `services-catalog.md`, `nats-subjects.md`
+**Domain Tags:** `knowledge`, `documents`
+**Context Tier:** 2 (On-Demand (Major Subsystem))
+<!-- /PMOVES.AI-CONTEXT-TAGS -->
