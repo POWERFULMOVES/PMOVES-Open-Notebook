@@ -219,6 +219,14 @@ See dedicated CLAUDE.md files for detailed guidance:
 
 **Last Updated**: January 2026 | **Project Version**: 1.2.4+
 
+## Security Posture
+
+- **P1 FIXED:** USER directive present (Jan 28 P2 satisfied)
+- **P2 OPEN:** SurrealDB root:root credentials not rotated in default config
+- **P2 OPEN:** Auth middleware fail-open (`if not self.password: return await call_next(request)` in `api/auth.py:29`)
+- **P2 OPEN:** Uses `/health` not `/healthz` convention; no `/metrics` endpoint
+- **GREEN:** Content processing sandboxed within API container
+
 <!-- PMOVES.AI-CONTEXT-TAGS -->
 ## PMOVES.AI Skill Hints
 
