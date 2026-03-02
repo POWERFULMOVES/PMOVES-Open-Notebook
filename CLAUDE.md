@@ -227,6 +227,17 @@ See dedicated CLAUDE.md files for detailed guidance:
 - **P2 OPEN:** Uses `/health` not `/healthz` convention; no `/metrics` endpoint
 - **GREEN:** Content processing sandboxed within API container
 
+## CHIT & Geometry Bus Integration
+
+**Status: No CHIT integration (by design)**
+
+Open Notebook is a SurrealDB-backed knowledge base / note-taking system. CHIT integration is not applicable:
+- Operates as a content storage and retrieval layer, not a geometry producer/consumer
+- No NATS connection (communication is via HTTP API from DeepResearch and Notebook Sync)
+- CGP data may flow into Open Notebook indirectly via DeepResearch results, but Open Notebook does not parse or produce CGP
+
+**Related:** DeepResearch (`pmoves/services/deep-research/`) publishes research results to Open Notebook and does interact with geometry subjects.
+
 <!-- PMOVES.AI-CONTEXT-TAGS -->
 ## PMOVES.AI Skill Hints
 

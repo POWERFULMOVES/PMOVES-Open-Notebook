@@ -16,8 +16,11 @@ jobs:
   claude-review:
     # Run for fork PRs (via pull_request_target) OR same-repo PRs (via pull_request), but not both
     if: |
-      (github.event_name == 'pull_request_target' && github.event.pull_request.head.repo.full_name != github.repository) ||
-      (github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository)
+      (
+        (github.event_name == 'pull_request_target' && github.event.pull_request.head.repo.full_name != github.repository) ||
+        (github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository)
+      ) &&
+      (secrets.ANTHROPIC_API_KEY != '' || secrets.CLAUDE_CODE_OAUTH_TOKEN != '')
 
     runs-on: ubuntu-latest
     permissions:
