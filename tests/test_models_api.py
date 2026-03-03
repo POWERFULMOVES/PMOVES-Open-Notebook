@@ -9,7 +9,10 @@ def client():
     """Create test client after environment variables have been cleared by conftest."""
     from api.main import app
 
-    return TestClient(app)
+    return TestClient(
+        app,
+        headers={"Authorization": "Bearer test-password"},
+    )
 
 
 class TestModelCreation:
