@@ -108,6 +108,16 @@ async def lifespan(app: FastAPI):
         logger.warning(f"Podcast profile migration encountered errors: {e}")
         # Non-fatal: profiles can be migrated manually via UI
 
+    # PMOVES: Bootstrap TensorZero provider (if in tensorzero mode)
+    try:
+        from pmoves_provider import bootstrap_tensorzero
+
+        await bootstrap_tensorzero()
+    except ImportError:
+        logger.debug("pmoves_provider not available, skipping TensorZero bootstrap")
+    except Exception as e:
+        logger.warning(f"TensorZero bootstrap failed (non-fatal): {e}")
+
     logger.success("API initialization completed successfully")
 
     # Yield control to the application
