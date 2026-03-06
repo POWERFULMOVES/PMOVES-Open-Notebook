@@ -4,6 +4,7 @@ import {
   PodcastEpisode,
   EpisodeProfile,
   SpeakerProfile,
+  Language,
   PodcastGenerationRequest,
   PodcastGenerationResponse,
 } from '@/lib/types/podcasts'
@@ -37,6 +38,13 @@ export const podcastsApi = {
 
   deleteEpisode: async (episodeId: string) => {
     await apiClient.delete(`/podcasts/episodes/${episodeId}`)
+  },
+
+  retryEpisode: async (episodeId: string) => {
+    const response = await apiClient.post<{ job_id: string; message: string }>(
+      `/podcasts/episodes/${episodeId}/retry`
+    )
+    return response.data
   },
 
   listEpisodeProfiles: async () => {
@@ -108,6 +116,11 @@ export const podcastsApi = {
       '/podcasts/generate',
       payload
     )
+    return response.data
+  },
+
+  listLanguages: async () => {
+    const response = await apiClient.get<Language[]>('/languages')
     return response.data
   },
 }

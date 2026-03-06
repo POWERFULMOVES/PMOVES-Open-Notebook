@@ -17,6 +17,7 @@ FastAPI application serving three architectural layers: routes (HTTP endpoints),
 - Load .env environment variables
 - Initialize CORS middleware + password auth middleware
 - Run database migrations via AsyncMigrationManager on lifespan startup
+- Run podcast profile data migration (legacy string to model registry conversion)
 - Register all routers
 
 **Key services**:
@@ -54,13 +55,15 @@ FastAPI application serving three architectural layers: routes (HTTP endpoints),
 ### Routers
 - **routers/chat.py**: POST /chat
 - **routers/source_chat.py**: POST /source/{source_id}/chat
-- **routers/podcasts.py**: POST /podcasts, GET /podcasts/{id}, etc.
+- **routers/podcasts.py**: POST /podcasts, GET /podcasts/{id}, POST /podcasts/episodes/{id}/retry, etc.
 - **routers/notes.py**: POST /notes, GET /notes/{id}
 - **routers/sources.py**: POST /sources, GET /sources/{id}, DELETE /sources/{id}
 - **routers/models.py**: GET /models, POST /models/config
+- **routers/credentials.py**: CRUD + test + discover + migrate for credential management
 - **routers/transformations.py**: POST /transformations
 - **routers/insights.py**: GET /sources/{source_id}/insights
 - **routers/auth.py**: POST /auth/password (password-based auth)
+- **routers/languages.py**: GET /languages (available podcast languages via pycountry+babel)
 - **routers/commands.py**: GET /commands/{command_id} (job status tracking)
 
 ## Common Patterns
@@ -69,7 +72,7 @@ FastAPI application serving three architectural layers: routes (HTTP endpoints),
 - **Async/await throughout**: All DB queries, graph invocations, AI calls are async
 - **SurrealDB transactions**: Services use repo_query, repo_create, repo_upsert from database layer
 - **Config override pattern**: Models/config override via models_service passed to graph.ainvoke(config=...)
-- **Error handling**: Services catch exceptions and return HTTP status codes (400 Bad Request, 404 Not Found, 500 Internal Server Error)
+- **Error handling**: Custom exception hierarchy (`open_notebook.exceptions`) with global FastAPI exception handlers mapping to HTTP status codes (see Error Handling section below). LangGraph nodes use `classify_error()` to convert raw LLM provider errors into typed exceptions with user-friendly messages.
 - **Logging**: loguru logger in main.py; services expected to log key operations
 - **Response normalization**: All responses follow standard schema (data + metadata structure)
 
@@ -100,6 +103,35 @@ FastAPI application serving three architectural layers: routes (HTTP endpoints),
 - **No OpenAPI security scheme**: API docs available without auth (disable before production)
 - **Services don't validate user permission**: All endpoints trust authentication layer; no per-notebook permission checks
 
+## Error Handling
+
+### Global Exception Handlers (`main.py`)
+
+FastAPI exception handlers map custom exception types from `open_notebook.exceptions` to HTTP status codes. All error responses include CORS headers.
+
+| Exception Class | HTTP Status | Use Case |
+|----------------|-------------|----------|
+| `NotFoundError` | 404 | Resource not found |
+| `InvalidInputError` | 400 | Bad request data |
+| `AuthenticationError` | 401 | Invalid/missing API key |
+| `RateLimitError` | 429 | Provider rate limit exceeded |
+| `ConfigurationError` | 422 | Wrong model name, missing config |
+| `NetworkError` | 502 | Cannot reach AI provider |
+| `ExternalServiceError` | 502 | Provider returned error (500/503, context length) |
+| `OpenNotebookError` (base) | 500 | Any other application error |
+
+### Error Classification (`open_notebook.utils.error_classifier`)
+
+The `classify_error()` function maps raw exceptions from LLM providers/Esperanto/LangChain into the typed exceptions above with user-friendly messages. Used in all LangGraph graph nodes and SSE streaming handlers.
+
+**Flow**: Raw exception → keyword matching → `(ExceptionClass, user_message)` → raised → caught by global handler → HTTP response with descriptive message.
+
+### Frontend Integration
+
+The frontend `getApiErrorMessage()` helper (`lib/utils/error-handler.ts`) tries i18n mapping first, then falls back to displaying the backend's descriptive error message directly.
+
+---
+
 ## How to Add New Endpoint
 
 1. Create router file in `routers/` (e.g., `routers/new_feature.py`)
@@ -115,3 +147,114 @@ FastAPI application serving three architectural layers: routes (HTTP endpoints),
 - **Direct service tests**: Import service, call methods directly with test data
 - **Mock graphs**: Replace graph.ainvoke() with mock for testing service logic
 - **Database: Use test database** (separate SurrealDB instance or mock repo_query)
+
+---
+
+## Credential Management (API Configuration UI)
+
+The Credential Management system enables users to configure AI provider credentials through the UI instead of environment variables. Keys are stored securely in SurrealDB (encrypted via Fernet) with database-first fallback to environment variables.
+
+### Router: `routers/credentials.py`
+
+**Endpoints**:
+
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| GET | `/credentials` | List all credentials (optional `?provider=` filter) |
+| GET | `/credentials/by-provider/{provider}` | List credentials for a provider |
+| POST | `/credentials` | Create a new credential |
+| GET | `/credentials/{credential_id}` | Get a specific credential |
+| PUT | `/credentials/{credential_id}` | Update a credential |
+| DELETE | `/credentials/{credential_id}` | Delete a credential |
+| POST | `/credentials/{credential_id}/test` | Test connection using credential |
+| POST | `/credentials/{credential_id}/discover` | Discover available models |
+| POST | `/credentials/{credential_id}/register-models` | Register discovered models |
+| POST | `/credentials/migrate-from-provider-config` | Migrate from legacy ProviderConfig |
+
+**Supported Providers** (13 total):
+- Simple API key: `openai`, `anthropic`, `google`, `groq`, `mistral`, `deepseek`, `xai`, `openrouter`, `voyage`, `elevenlabs`
+- URL-based: `ollama`
+- Multi-field: `azure`, `vertex`, `openai_compatible`
+
+**Security Features**:
+- NEVER returns actual API key values (only metadata)
+- URL validation (SSRF protection) on all URL fields via `_validate_url()`
+- Allows private IPs and localhost for self-hosted services (Ollama, LM Studio)
+- Requires `OPEN_NOTEBOOK_ENCRYPTION_KEY` to be set for storing credentials
+
+### Domain Model: `Credential` (`open_notebook/domain/credential.py`)
+
+Individual credential records replacing the old `ProviderConfig` singleton. Each credential stores:
+- Provider name, display name, modalities
+- Encrypted API key (via Fernet)
+- Provider-specific config (base_url, endpoint, api_version, etc.)
+
+### Integration with Key Provider (`open_notebook/ai/key_provider.py`)
+
+The `key_provider` module provisions DB-stored credentials into environment variables for Esperanto compatibility:
+
+**Database-first Pattern**:
+1. API endpoint saves keys to `Credential` records (encrypted in SurrealDB)
+2. Before model provisioning, `provision_provider_keys(provider)` checks DB, then env vars
+3. Keys from DB are set as environment variables for Esperanto compatibility
+4. Existing env vars remain unchanged if no DB config exists
+
+**Key Functions**:
+- `get_api_key(provider)`: Get API key (DB first, env fallback)
+- `provision_provider_keys(provider)`: Set env vars from DB for a provider
+- `provision_all_keys()`: Load all provider keys from DB into env vars
+
+### Authentication
+
+No changes to authentication. The `credentials` router uses the same `PasswordAuthMiddleware` as all other endpoints. Keys are protected by the same password-based auth.
+
+**Auth Flow** (unchanged from `api/auth.py`):
+- `PasswordAuthMiddleware`: Global middleware checking `Authorization: Bearer {password}` header
+- Default password: `open-notebook-change-me` (set `OPEN_NOTEBOOK_PASSWORD` in production)
+- Docker secrets support via `OPEN_NOTEBOOK_PASSWORD_FILE`
+
+### Connection Testing (`open_notebook/ai/connection_tester.py`)
+
+The `/credentials/{credential_id}/test` endpoint uses minimal API calls to verify credentials:
+- Loads Credential via `Credential.get(config_id)`, uses `credential.to_esperanto_config()`
+- Uses cheapest/smallest models per provider (TEST_MODELS map)
+- Returns success status and descriptive message
+- Special handlers for ollama, openai_compatible, and azure providers
+
+### Migration Workflows
+
+Two migration endpoints help users transition to the credential system:
+
+**From environment variables** (`POST /credentials/migrate-from-env`):
+1. Checks each provider for env var presence
+2. Creates Credential records from env var values
+3. Returns summary: migrated, skipped, errors
+
+**From legacy ProviderConfig** (`POST /credentials/migrate-from-provider-config`):
+1. Reads old ProviderConfig records from database
+2. Converts each to individual Credential records
+3. Returns summary: migrated, skipped, errors
+
+### Example Usage
+
+```python
+# Check status
+GET /credentials/status
+# Response: {"configured": {"openai": true, "anthropic": false}, "source": {"openai": "database", "anthropic": "none"}, "encryption_configured": true}
+
+# Create credential
+POST /credentials
+{"name": "My OpenAI Key", "provider": "openai", "modalities": ["language", "embedding"], "api_key": "sk-proj-..."}
+
+# Test connection
+POST /credentials/{credential_id}/test
+# Response: {"provider": "openai", "success": true, "message": "Connection successful"}
+
+# Discover models
+POST /credentials/{credential_id}/discover
+# Response: {"provider": "openai", "models": [{"model_id": "gpt-4", "name": "gpt-4", ...}], "credential_id": "..."}
+
+# Migrate from env
+POST /credentials/migrate-from-env
+# Response: {"message": "Migration complete. Migrated 3 providers.", "migrated": ["openai", "anthropic", "groq"], "skipped": [], "errors": []}
+```

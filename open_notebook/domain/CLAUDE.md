@@ -32,7 +32,7 @@ Two base classes support different persistence patterns: **ObjectModel** (mutabl
   - `vectorize()`: Submit async embedding job (returns command_id, fire-and-forget)
   - `get_status()`, `get_processing_progress()`: Track job via surreal_commands
   - `get_context()`: Returns summary for LLM context
-  - `add_insight()`: Generate and store insights with embeddings
+  - `add_insight()`: Submit async insight creation via `create_insight_command` (fire-and-forget, returns command_id)
 
 - **Note**: Standalone or linked notes
   - `save()`: Submits `embed_note` command after save (fire-and-forget)
@@ -52,6 +52,23 @@ Two base classes support different persistence patterns: **ObjectModel** (mutabl
 ### transformation.py
 - **Transformation**: Reusable prompts for content transformation
 - **DefaultPrompts**: Singleton with transformation instructions
+
+### credential.py
+- **Credential**: Individual credential records for API keys and provider configuration
+  - **One record per credential**: Each credential (e.g., "My OpenAI Key", "Work Anthropic") is a separate `Credential` record in SurrealDB
+  - **Fields**: name, provider, modalities (list), api_key (SecretStr), base_url, endpoint, api_version, endpoint_llm/embedding/stt/tts, project, location, credentials_path
+  - **SecretStr protection**: API key field uses Pydantic's `SecretStr` (values masked in logs/repr)
+  - **Encryption integration**: Uses `encrypt_value()`/`decrypt_value()` from `open_notebook.utils.encryption`
+    - Keys encrypted with Fernet before database storage
+    - Requires `OPEN_NOTEBOOK_ENCRYPTION_KEY` environment variable (warns if not set)
+  - **Key methods**:
+    - `to_esperanto_config()`: Builds config dict for Esperanto's AIFactory methods
+    - `get_by_provider(provider)`: Class method to fetch all credentials for a provider
+    - `get_linked_models()`: Returns all Model records linked to this credential
+  - **Custom serialization**: `_prepare_save_data()` extracts SecretStr values and encrypts before storage
+  - **Decryption on read**: `get()` and `get_all()` overridden to decrypt api_key after fetch
+
+- **Note**: `provider_config.py` still exists for legacy migration support (migrating old ProviderConfig records to Credential)
 
 ## Important Patterns
 
@@ -80,7 +97,7 @@ Two base classes support different persistence patterns: **ObjectModel** (mutabl
 - **Auto-embedding behavior**:
   - `Note.save()` → auto-submits `embed_note` command
   - `Source.save()` → does NOT auto-submit (must call `vectorize()` explicitly)
-  - `Source.add_insight()` → auto-submits `embed_insight` command
+  - `Source.add_insight()` → submits `create_insight_command` which handles DB insert + `embed_insight` command (all fire-and-forget)
 - **Relationship strings**: Must match SurrealDB schema (reference, artifact, refers_to)
 
 ## How to Add New Model

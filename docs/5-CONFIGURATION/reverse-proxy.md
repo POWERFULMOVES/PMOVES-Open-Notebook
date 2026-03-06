@@ -61,11 +61,16 @@ server {
 
 ```caddy
 notebook.example.com {
-    reverse_proxy open-notebook:8502
+    reverse_proxy open-notebook:8502 {
+        transport http {
+            read_timeout 600s
+            write_timeout 600s
+        }
+    }
 }
 ```
 
-That's it! Caddy handles HTTPS automatically.
+Caddy handles HTTPS automatically. The timeout settings ensure long-running operations (transformations, podcast generation) don't fail.
 
 ### Traefik
 
@@ -82,8 +87,21 @@ services:
       - "traefik.http.routers.notebook.entrypoints=websecure"
       - "traefik.http.routers.notebook.tls.certresolver=myresolver"
       - "traefik.http.services.notebook.loadbalancer.server.port=8502"
+      # Timeout for long-running operations (transformations, podcasts)
+      - "traefik.http.services.notebook.loadbalancer.responseforwarding.flushinterval=100ms"
     networks:
       - traefik-network
+```
+
+**Note**: For Traefik v2+, you may also need to configure `serversTransport` timeouts in your static configuration:
+
+```yaml
+# traefik.yml (static configuration)
+serversTransport:
+  forwardingTimeouts:
+    dialTimeout: 30s
+    responseHeaderTimeout: 600s
+    idleConnTimeout: 90s
 ```
 
 ### Coolify
@@ -107,6 +125,8 @@ API_URL=https://your-domain.com
 ```
 
 **Important**: Set `API_URL` to your public URL (with https://).
+
+**Note on HOSTNAME**: The Docker images set `HOSTNAME=0.0.0.0` by default, which ensures Next.js binds to all interfaces and is accessible from reverse proxies. You typically don't need to set this manually.
 
 ---
 
@@ -147,7 +167,7 @@ services:
     container_name: open-notebook
     environment:
       - API_URL=https://notebook.example.com
-      - OPENAI_API_KEY=${OPENAI_API_KEY}
+      - OPEN_NOTEBOOK_ENCRYPTION_KEY=${OPEN_NOTEBOOK_ENCRYPTION_KEY}
       - OPEN_NOTEBOOK_PASSWORD=${OPEN_NOTEBOOK_PASSWORD}
     volumes:
       - ./notebook_data:/app/data
@@ -223,10 +243,11 @@ http {
             proxy_set_header Connection 'upgrade';
             proxy_cache_bypass $http_upgrade;
 
-            # Timeouts for long-running operations (podcasts, etc.)
-            proxy_read_timeout 300s;
+            # Timeouts for long-running operations (transformations, podcasts, etc.)
+            # 600s matches the frontend timeout for slow LLM operations
+            proxy_read_timeout 600s;
             proxy_connect_timeout 60s;
-            proxy_send_timeout 300s;
+            proxy_send_timeout 600s;
         }
     }
 }
@@ -319,7 +340,7 @@ services:
     pull_policy: always
     environment:
       - API_URL=https://api.notebook.example.com
-      - OPENAI_API_KEY=${OPENAI_API_KEY}
+      - OPEN_NOTEBOOK_ENCRYPTION_KEY=${OPEN_NOTEBOOK_ENCRYPTION_KEY}
     # Don't expose ports (nginx handles routing)
 ```
 
@@ -388,7 +409,7 @@ services:
     image: lfnovo/open_notebook_api:v1-latest
     pull_policy: always
     environment:
-      - OPENAI_API_KEY=${OPENAI_API_KEY}
+      - OPEN_NOTEBOOK_ENCRYPTION_KEY=${OPEN_NOTEBOOK_ENCRYPTION_KEY}
     ports:
       - "5055:5055"
     depends_on:
@@ -523,12 +544,49 @@ proxy_set_header Connection 'upgrade';
 
 ### Timeout Errors
 
-Increase timeouts for long operations (podcast generation):
+**Symptoms:**
+- `socket hang up` or `ECONNRESET` errors
+- `Timeout after 30000ms` errors
+- Operations fail after exactly 30 seconds
 
+**Cause:** Your reverse proxy has a default timeout (often 30s) that's shorter than Open Notebook's operations.
+
+**Solutions by proxy:**
+
+**Nginx:**
 ```nginx
-proxy_read_timeout 300s;
-proxy_send_timeout 300s;
+proxy_read_timeout 600s;
+proxy_send_timeout 600s;
 ```
+
+**Caddy:**
+```caddy
+reverse_proxy open-notebook:8502 {
+    transport http {
+        read_timeout 600s
+        write_timeout 600s
+    }
+}
+```
+
+**Traefik (static config):**
+```yaml
+serversTransport:
+  forwardingTimeouts:
+    responseHeaderTimeout: 600s
+```
+
+**Application-level timeouts:**
+
+If you still experience timeouts after configuring your proxy, you can also adjust the application timeouts:
+
+```bash
+# In .env file:
+API_CLIENT_TIMEOUT=600      # API client timeout (default: 300s)
+ESPERANTO_LLM_TIMEOUT=180   # LLM inference timeout (default: 60s)
+```
+
+See [Advanced Configuration](advanced.md) for more timeout options.
 
 ---
 
@@ -558,7 +616,7 @@ You'll see which API URL is being used
 curl https://your-domain.com/api/config
 
 # Expected output:
-{"openai_api_key_set":true,"anthropic_api_key_set":false,...}
+{"status":"ok","credentials_configured":true,...}
 ```
 
 **Step 3: Check Docker logs**
@@ -685,7 +743,12 @@ When uploading files, your reverse proxy may reject the request due to body size
        request_body {
            max_size 100MB
        }
-       reverse_proxy open-notebook:8502
+       reverse_proxy open-notebook:8502 {
+           transport http {
+               read_timeout 600s
+               write_timeout 600s
+           }
+       }
    }
    ```
 
