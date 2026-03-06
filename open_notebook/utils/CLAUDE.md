@@ -18,6 +18,30 @@ Provides cross-cutting concerns: building LLM context from sources/insights, con
 
 Each utility is stateless and can be imported independently.
 
+## Configuration
+
+### Chunking Configuration (chunking.py)
+
+The chunking behavior can be configured via environment variables:
+
+- **OPEN_NOTEBOOK_CHUNK_SIZE**: Maximum chunk size in characters (default: 1200)
+  - Minimum: 100 characters
+  - Warnings: Values > 8192 characters or invalid values
+  - Use case: Smaller models (e.g., mxbai-embed-large with limited context window)
+
+- **OPEN_NOTEBOOK_CHUNK_OVERLAP**: Overlap between chunks in characters (default: 15% of CHUNK_SIZE)
+  - Must be: >= 0 and < CHUNK_SIZE
+  - Warnings: Invalid values or values >= CHUNK_SIZE
+  - Use case: Control how much context is shared between adjacent chunks
+
+Example for models with small context windows:
+```bash
+export OPEN_NOTEBOOK_CHUNK_SIZE=512
+export OPEN_NOTEBOOK_CHUNK_OVERLAP=50
+```
+
+Note: Changes require restart of the application.
+
 ## Component Catalog
 
 ### context_builder.py
@@ -39,8 +63,8 @@ Each utility is stateless and can be imported independently.
 
 ### chunking.py
 - **ContentType**: Enum (HTML, MARKDOWN, PLAIN)
-- **CHUNK_SIZE**: constant
-- **CHUNK_OVERLAP**: constant
+- **CHUNK_SIZE**: Configurable via `OPEN_NOTEBOOK_CHUNK_SIZE` env var (default: 1200)
+- **CHUNK_OVERLAP**: Configurable via `OPEN_NOTEBOOK_CHUNK_OVERLAP` env var (default: 15% of CHUNK_SIZE)
 - **detect_content_type_from_extension(file_path)**: Detect type from file extension
 - **detect_content_type_from_heuristics(text)**: Detect type from content patterns (returns type + confidence)
 - **detect_content_type(text, file_path)**: Combined detection (extension primary, heuristics fallback)
@@ -54,7 +78,7 @@ Each utility is stateless and can be imported independently.
 
 ### embedding.py
 - **mean_pool_embeddings(embeddings)**: Combine multiple embeddings via normalized mean pooling
-- **generate_embeddings(texts)**: Batch embedding via single Esperanto API call
+- **generate_embeddings(texts)**: Batch embedding with automatic batching (default 50 texts per batch) and per-batch retry
 - **generate_embedding(text, content_type, file_path)**: Unified embedding with automatic chunking + mean pooling
 
 **Key behavior**:
@@ -125,7 +149,7 @@ Each utility is stateless and can be imported independently.
 
 1. **Add new context source type**: Create fetch method in ContextBuilder; update ContextConfig.sources dict
 2. **Add content type**: Add to ContentType enum; create splitter getter; update chunk_text()
-3. **Change chunk size**: Modify CHUNK_SIZE and CHUNK_OVERLAP constants in chunking.py
+3. **Change chunk size**: Set OPEN_NOTEBOOK_CHUNK_SIZE and OPEN_NOTEBOOK_CHUNK_OVERLAP environment variables
 4. **Add text preprocessing**: Add new function to text_utils (e.g., remove_urls, extract_keywords)
 5. **Change tokenization**: Replace tiktoken with alternative library in token_utils; update all calls
 6. **Add context filtering**: Extend ContextConfig with filter_by_date, filter_by_topic fields
@@ -167,4 +191,38 @@ context_items = await builder.build()
 
 for item in context_items:
     print(f"{item.type}:{item.id} ({item.token_count} tokens)")
+```
+
+### encryption.py
+- **get_secret_from_env(var_name)**: Retrieve secret from environment with Docker secrets support (checks VAR_FILE first, then VAR)
+- **get_fernet()**: Get Fernet instance if encryption key is configured
+- **encrypt_value(value)**: Encrypt a string using Fernet symmetric encryption
+- **decrypt_value(value)**: Decrypt a Fernet-encrypted string; gracefully falls back to original value for legacy/unencrypted data
+**Purpose**: Provides field-level encryption for sensitive data (API keys) stored in the database. Uses Fernet symmetric encryption (AES-128-CBC with HMAC-SHA256) for authenticated encryption.
+
+**Key behavior**:
+- Key source: OPEN_NOTEBOOK_ENCRYPTION_KEY_FILE (Docker secrets) → OPEN_NOTEBOOK_ENCRYPTION_KEY (env var)
+- Accepts **any string**: always derived to a Fernet key via SHA-256
+- No default key — encryption is unavailable until the env var is set
+- Graceful fallback on decryption: InvalidToken errors (legacy unencrypted data) return the original value
+- Lazy-loaded key: initialized on first use, not at import time
+
+**Security considerations**:
+- OPEN_NOTEBOOK_ENCRYPTION_KEY must be set explicitly (no default)
+- Docker secrets pattern supported for secure key injection in containerized environments
+- Key rotation would require re-encrypting all stored keys (not currently implemented)
+- Encryption is transparent to callers; unencrypted legacy data continues to work
+
+**Usage Example**:
+```python
+from open_notebook.utils.encryption import encrypt_value, decrypt_value
+
+# Encrypt before storing in database
+encrypted_api_key = encrypt_value(api_key)
+
+# Decrypt when reading from database
+decrypted_api_key = decrypt_value(encrypted_api_key)
+
+# Set any string as encryption key:
+# OPEN_NOTEBOOK_ENCRYPTION_KEY=my-secret-passphrase
 ```

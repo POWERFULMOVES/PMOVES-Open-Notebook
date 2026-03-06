@@ -12,15 +12,27 @@ from loguru import logger
 from starlette.exceptions import HTTPException as StarletteHTTPException
 
 from api.auth import PasswordAuthMiddleware
+from open_notebook.exceptions import (
+    AuthenticationError,
+    ConfigurationError,
+    ExternalServiceError,
+    InvalidInputError,
+    NetworkError,
+    NotFoundError,
+    OpenNotebookError,
+    RateLimitError,
+)
 from api.routers import (
     auth,
     chat,
     config,
     context,
+    credentials,
     embedding,
     embedding_rebuild,
     episode_profiles,
     insights,
+    languages,
     models,
     notebooks,
     notes,
@@ -34,6 +46,7 @@ from api.routers import (
 )
 from api.routers import commands as commands_router
 from open_notebook.database.async_migrate import AsyncMigrationManager
+from open_notebook.utils.encryption import get_secret_from_env
 from pmoves_health import health_check_router
 
 # Import commands to register them in the API process
@@ -49,8 +62,20 @@ async def lifespan(app: FastAPI):
     Lifespan event handler for the FastAPI application.
     Runs database migrations automatically on startup.
     """
-    # Startup: Run database migrations
+    import os
+
+    # Startup: Security checks
     logger.info("Starting API initialization...")
+
+    # Security check: Encryption key
+    if not get_secret_from_env("OPEN_NOTEBOOK_ENCRYPTION_KEY"):
+        logger.warning(
+            "OPEN_NOTEBOOK_ENCRYPTION_KEY not set. "
+            "API key encryption will fail until this is configured. "
+            "Set OPEN_NOTEBOOK_ENCRYPTION_KEY to any secret string."
+        )
+
+    # Run database migrations
 
     try:
         migration_manager = AsyncMigrationManager()
@@ -73,6 +98,25 @@ async def lifespan(app: FastAPI):
         logger.exception(e)
         # Fail fast - don't start the API with an outdated database schema
         raise RuntimeError(f"Failed to run database migrations: {str(e)}") from e
+
+    # Run podcast profile data migration (legacy strings -> Model registry)
+    try:
+        from open_notebook.podcasts.migration import migrate_podcast_profiles
+
+        await migrate_podcast_profiles()
+    except Exception as e:
+        logger.warning(f"Podcast profile migration encountered errors: {e}")
+        # Non-fatal: profiles can be migrated manually via UI
+
+    # PMOVES: Bootstrap TensorZero provider (if in tensorzero mode)
+    try:
+        from pmoves_provider import bootstrap_tensorzero
+
+        await bootstrap_tensorzero()
+    except ImportError:
+        logger.debug("pmoves_provider not available, skipping TensorZero bootstrap")
+    except Exception as e:
+        logger.warning(f"TensorZero bootstrap failed (non-fatal): {e}")
 
     logger.success("API initialization completed successfully")
 
@@ -142,6 +186,88 @@ async def custom_http_exception_handler(request: Request, exc: StarletteHTTPExce
     )
 
 
+def _cors_headers(request: Request) -> dict[str, str]:
+    origin = request.headers.get("origin", "*")
+    return {
+        "Access-Control-Allow-Origin": origin,
+        "Access-Control-Allow-Credentials": "true",
+        "Access-Control-Allow-Methods": "*",
+        "Access-Control-Allow-Headers": "*",
+    }
+
+
+@app.exception_handler(NotFoundError)
+async def not_found_error_handler(request: Request, exc: NotFoundError):
+    return JSONResponse(
+        status_code=404,
+        content={"detail": str(exc)},
+        headers=_cors_headers(request),
+    )
+
+
+@app.exception_handler(InvalidInputError)
+async def invalid_input_error_handler(request: Request, exc: InvalidInputError):
+    return JSONResponse(
+        status_code=400,
+        content={"detail": str(exc)},
+        headers=_cors_headers(request),
+    )
+
+
+@app.exception_handler(AuthenticationError)
+async def authentication_error_handler(request: Request, exc: AuthenticationError):
+    return JSONResponse(
+        status_code=401,
+        content={"detail": str(exc)},
+        headers=_cors_headers(request),
+    )
+
+
+@app.exception_handler(RateLimitError)
+async def rate_limit_error_handler(request: Request, exc: RateLimitError):
+    return JSONResponse(
+        status_code=429,
+        content={"detail": str(exc)},
+        headers=_cors_headers(request),
+    )
+
+
+@app.exception_handler(ConfigurationError)
+async def configuration_error_handler(request: Request, exc: ConfigurationError):
+    return JSONResponse(
+        status_code=422,
+        content={"detail": str(exc)},
+        headers=_cors_headers(request),
+    )
+
+
+@app.exception_handler(NetworkError)
+async def network_error_handler(request: Request, exc: NetworkError):
+    return JSONResponse(
+        status_code=502,
+        content={"detail": str(exc)},
+        headers=_cors_headers(request),
+    )
+
+
+@app.exception_handler(ExternalServiceError)
+async def external_service_error_handler(request: Request, exc: ExternalServiceError):
+    return JSONResponse(
+        status_code=502,
+        content={"detail": str(exc)},
+        headers=_cors_headers(request),
+    )
+
+
+@app.exception_handler(OpenNotebookError)
+async def open_notebook_error_handler(request: Request, exc: OpenNotebookError):
+    return JSONResponse(
+        status_code=500,
+        content={"detail": str(exc)},
+        headers=_cors_headers(request),
+    )
+
+
 # Include routers
 app.include_router(auth.router, prefix="/api", tags=["auth"])
 app.include_router(config.router, prefix="/api", tags=["config"])
@@ -164,6 +290,8 @@ app.include_router(episode_profiles.router, prefix="/api", tags=["episode-profil
 app.include_router(speaker_profiles.router, prefix="/api", tags=["speaker-profiles"])
 app.include_router(chat.router, prefix="/api", tags=["chat"])
 app.include_router(source_chat.router, prefix="/api", tags=["source-chat"])
+app.include_router(credentials.router, prefix="/api", tags=["credentials"])
+app.include_router(languages.router, prefix="/api", tags=["languages"])
 app.include_router(health_check_router)
 
 

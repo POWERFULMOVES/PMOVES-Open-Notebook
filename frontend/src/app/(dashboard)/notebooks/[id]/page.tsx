@@ -58,16 +58,21 @@ export default function NotebookPage() {
     notes: {}
   })
 
-  // Initialize default selections when sources/notes load
+  // Initialize and update selections when sources load or change
   useEffect(() => {
     if (sources && sources.length > 0) {
       setContextSelections(prev => {
         const newSourceSelections = { ...prev.sources }
         sources.forEach(source => {
-          // Only set default if not already set
-          if (!(source.id in newSourceSelections)) {
-            // Default to 'insights' if has insights, otherwise 'full'
-            newSourceSelections[source.id] = source.insights_count > 0 ? 'insights' : 'full'
+          const currentMode = newSourceSelections[source.id]
+          const hasInsights = source.insights_count > 0
+
+          if (currentMode === undefined) {
+            // Initial setup - default based on insights availability
+            newSourceSelections[source.id] = hasInsights ? 'insights' : 'full'
+          } else if (currentMode === 'full' && hasInsights) {
+            // Source gained insights while in 'full' mode - auto-switch to 'insights'
+            newSourceSelections[source.id] = 'insights'
           }
         })
         return { ...prev, sources: newSourceSelections }
@@ -180,6 +185,8 @@ export default function NotebookPage() {
                   <ChatColumn
                     notebookId={notebookId}
                     contextSelections={contextSelections}
+                    sources={sources}
+                    sourcesLoading={sourcesLoading}
                   />
                 )}
               </div>
@@ -225,10 +232,12 @@ export default function NotebookPage() {
             </div>
 
             {/* Chat Column - always expanded, takes remaining space */}
-            <div className="transition-all duration-150 flex-1 lg:pr-6 lg:-mr-6">
+            <div className="transition-all duration-150 flex-1 min-w-0 lg:pr-6 lg:-mr-6">
               <ChatColumn
                 notebookId={notebookId}
                 contextSelections={contextSelections}
+                sources={sources}
+                sourcesLoading={sourcesLoading}
               />
             </div>
           </div>

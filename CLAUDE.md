@@ -36,7 +36,7 @@ This file provides architectural guidance for contributors working on Open Noteb
 │         Database (SurrealDB)                            │
 │         Graph database @ port 8000                      │
 ├─────────────────────────────────────────────────────────┤
-│ - Records: Notebook, Source, Note, ChatSession, etc.    │
+│ - Records: Notebook, Source, Note, ChatSession, Credential│
 │ - Relationships: source-to-notebook, note-to-source     │
 │ - Vector embeddings for semantic search                 │
 └─────────────────────────────────────────────────────────┘
@@ -98,7 +98,8 @@ User documentation is at @docs/
 
 ### 3. Multi-Provider AI
 - **Esperanto library**: Unified interface to 8+ AI providers
-- **ModelManager**: Factory pattern with fallback logic
+- **Credential system**: Individual encrypted credential records per provider; models link to credentials for direct config
+- **ModelManager**: Factory pattern with fallback logic; uses credential config when available, env vars as fallback
 - **Smart selection**: Detects large contexts, prefers long-context models
 - **Override support**: Per-request model configuration
 
@@ -217,15 +218,16 @@ See dedicated CLAUDE.md files for detailed guidance:
 
 ---
 
-**Last Updated**: January 2026 | **Project Version**: 1.2.4+
+**Last Updated**: March 2026 | **Project Version**: 1.8.0
 
 ## Security Posture
 
 - **P1 FIXED:** USER directive present (Jan 28 P2 satisfied)
+- **P1 FIXED:** Auth middleware fail-closed (raises HTTPException 500 when no password configured)
 - **P2 OPEN:** SurrealDB root:root credentials not rotated in default config
-- **P2 OPEN:** Auth middleware fail-open (`if not self.password: return await call_next(request)` in `api/auth.py:29`)
 - **P2 OPEN:** Uses `/health` not `/healthz` convention; no `/metrics` endpoint
 - **GREEN:** Content processing sandboxed within API container
+- **GREEN:** Credential encryption via Fernet (upstream 1.8)
 
 ## CHIT & Geometry Bus Integration
 
@@ -237,6 +239,10 @@ Open Notebook is a SurrealDB-backed knowledge base / note-taking system. CHIT in
 - CGP data may flow into Open Notebook indirectly via DeepResearch results, but Open Notebook does not parse or produce CGP
 
 **Related:** DeepResearch (`pmoves/services/deep-research/`) publishes research results to Open Notebook and does interact with geometry subjects.
+
+## TensorZero Provider Mode
+
+When `NOTEBOOK_PROVIDER_MODE=tensorzero` (default in PMOVES), all LLM/embedding calls route through TensorZero gateway via a managed `openai_compatible` credential. The `pmoves_provider/` module bootstraps this on startup.
 
 <!-- PMOVES.AI-CONTEXT-TAGS -->
 ## PMOVES.AI Skill Hints

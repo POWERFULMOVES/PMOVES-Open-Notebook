@@ -80,6 +80,9 @@ COPY --from=builder --chown=opennotebook:opennotebook /app /app
 ENV UV_NO_SYNC=1
 ENV VIRTUAL_ENV=/app/.venv
 
+# Bind Next.js to all interfaces (required for Docker networking and reverse proxies)
+ENV HOSTNAME=0.0.0.0
+
 # Copy built frontend from builder stage - security: owned by non-root user
 COPY --from=builder --chown=opennotebook:opennotebook /app/frontend/.next/standalone /app/frontend/
 COPY --from=builder --chown=opennotebook:opennotebook /app/frontend/.next/static /app/frontend/.next/static
