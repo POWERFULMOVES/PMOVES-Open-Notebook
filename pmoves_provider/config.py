@@ -9,11 +9,13 @@ class ProviderMode(str, Enum):
 
     TENSORZERO = "tensorzero"
     NATIVE = "native"
+    HYBRID = "hybrid"
 
 
 # Credential record constants
 TENSORZERO_CREDENTIAL_NAME = "TensorZero Gateway (PMOVES)"
 TENSORZERO_PROVIDER = "openai_compatible"
+REGISTRY_CREDENTIAL_SUFFIX = "(PMOVES Registry)"
 
 
 def get_provider_mode() -> ProviderMode:
@@ -35,3 +37,8 @@ def get_tensorzero_base_url() -> str:
 def get_tensorzero_api_key() -> str:
     """API key for TensorZero gateway (internal traffic, usually a sentinel)."""
     return os.environ.get("TENSORZERO_API_KEY", "pmoves-internal")
+
+
+def get_model_registry_url() -> str:
+    """PMOVES Model Registry base URL for hybrid mode."""
+    return os.environ.get("MODEL_REGISTRY_URL", "http://model-registry:8110")
