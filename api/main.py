@@ -11,6 +11,8 @@ from fastapi.responses import JSONResponse
 from loguru import logger
 from starlette.exceptions import HTTPException as StarletteHTTPException
 
+from prometheus_client import make_asgi_app
+
 from api.auth import PasswordAuthMiddleware
 from open_notebook.exceptions import (
     AuthenticationError,
@@ -141,6 +143,7 @@ app.add_middleware(
         "/",
         "/health",
         "/healthz",
+        "/metrics",
         "/docs",
         "/openapi.json",
         "/redoc",
@@ -293,6 +296,10 @@ app.include_router(source_chat.router, prefix="/api", tags=["source-chat"])
 app.include_router(credentials.router, prefix="/api", tags=["credentials"])
 app.include_router(languages.router, prefix="/api", tags=["languages"])
 app.include_router(health_check_router)
+
+# Prometheus metrics endpoint for PMOVES observability
+metrics_app = make_asgi_app()
+app.mount("/metrics", metrics_app)
 
 
 @app.get("/")
