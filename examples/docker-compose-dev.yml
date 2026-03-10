@@ -7,7 +7,7 @@ services:
       - SURREAL_EXPERIMENTAL_GRAPHQL=true
     ports:
       - "8000:8000"
-    command: start --log info --user root --pass root rocksdb:/mydata/mydatabase.db
+    command: start --log info --user ${SURREAL_USER:-root} --pass ${SURREAL_PASSWORD:-changeme_surreal} rocksdb:/mydata/mydatabase.db
     pull_policy: always
     user: root
     restart: always

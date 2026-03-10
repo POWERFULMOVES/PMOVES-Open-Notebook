@@ -13,7 +13,7 @@
 services:
   surrealdb:
     image: surrealdb/surrealdb:v2
-    command: start --log info --user root --pass root rocksdb:/mydata/mydatabase.db
+    command: start --log info --user ${SURREAL_USER:-root} --pass ${SURREAL_PASSWORD:-changeme_surreal} rocksdb:/mydata/mydatabase.db
     user: root
     ports:
       - "8000:8000"
@@ -44,8 +44,8 @@ services:
 
       # Database connection
       - SURREAL_URL=ws://surrealdb:8000/rpc
-      - SURREAL_USER=root
-      - SURREAL_PASSWORD=root
+      - SURREAL_USER=${SURREAL_USER:-root}
+      - SURREAL_PASSWORD=${SURREAL_PASSWORD:-changeme_surreal}
       - SURREAL_NAMESPACE=open_notebook
       - SURREAL_DATABASE=open_notebook
 
