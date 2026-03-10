@@ -224,8 +224,8 @@ See dedicated CLAUDE.md files for detailed guidance:
 
 - **P1 FIXED:** USER directive present (Jan 28 P2 satisfied)
 - **P1 FIXED:** Auth middleware fail-closed (raises HTTPException 500 when no password configured)
-- **P2 OPEN:** SurrealDB root:root credentials not rotated in default config
-- **P2 OPEN:** Uses `/health` not `/healthz` convention; no `/metrics` endpoint
+- **P2 FIXED:** SurrealDB credentials use env var substitution (`${SURREAL_PASSWORD:-changeme_surreal}`)
+- **P2 FIXED:** `/healthz` alias registered, `/metrics` Prometheus endpoint added
 - **GREEN:** Content processing sandboxed within API container
 - **GREEN:** Credential encryption via Fernet (upstream 1.8)
 
