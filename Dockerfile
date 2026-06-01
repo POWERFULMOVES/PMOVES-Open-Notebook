@@ -56,7 +56,7 @@ RUN groupadd -g 1000 -r opennotebook && \
 
 # Install only runtime system dependencies (no build tools)
 # Add Node.js 20.x LTS for running frontend
-RUN apt-get update && apt-get install -y --no-install-recommends \
+RUN apt-get update && apt-get upgrade -y && apt-get install -y --no-install-recommends \
     ffmpeg \
     supervisor \
     curl \
