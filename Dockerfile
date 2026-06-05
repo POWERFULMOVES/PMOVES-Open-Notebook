@@ -32,6 +32,14 @@ COPY open_notebook/__init__.py ./open_notebook/__init__.py
 # Install dependencies with optimizations (this layer will be cached unless dependencies change)
 RUN uv sync --frozen --no-dev
 
+# Pre-download tiktoken encoding so the app works offline (issue #264).
+# /app/tiktoken-cache is intentionally outside /app/data/ so that volume mounts
+# of /app/data (for user data persistence) do not hide the pre-baked encoding.
+# config.py reads TIKTOKEN_CACHE_DIR from the environment to pick up this path.
+ENV TIKTOKEN_CACHE_DIR=/app/tiktoken-cache
+RUN mkdir -p /app/tiktoken-cache && \
+    .venv/bin/python -c "import tiktoken; tiktoken.get_encoding('o200k_base')"
+
 # Copy the rest of the application code
 COPY . /app
 
@@ -39,8 +47,17 @@ COPY . /app
 WORKDIR /app/frontend
 ARG NPM_REGISTRY=https://registry.npmjs.org/
 COPY frontend/package.json frontend/package-lock.json ./
-RUN npm config set registry ${NPM_REGISTRY}
-RUN npm ci
+RUN npm config set registry ${NPM_REGISTRY} \
+ && npm config set fetch-retries 5 \
+ && npm config set fetch-retry-mintimeout 20000 \
+ && npm config set fetch-retry-maxtimeout 120000
+# Retry npm ci to survive transient registry ECONNRESETs, which are common on
+# the QEMU-emulated arm64 leg of the multi-arch build.
+RUN i=0; until npm ci; do \
+      i=$((i+1)); \
+      if [ "$i" -ge 5 ]; then echo "npm ci failed after $i attempts"; exit 1; fi; \
+      echo "npm ci failed (attempt $i); retrying in 15s"; sleep 15; \
+    done
 COPY frontend/ ./
 RUN npm run build
 
@@ -76,9 +93,14 @@ COPY --from=builder --chown=opennotebook:opennotebook /app/.venv /app/.venv
 # Copy the source code (the rest) - security: owned by non-root user
 COPY --from=builder --chown=opennotebook:opennotebook /app /app
 
+# Copy pre-downloaded tiktoken encoding from builder (outside /data/ — volume-mount safe)
+COPY --from=builder /app/tiktoken-cache /app/tiktoken-cache
+
 # Ensure uv uses the existing venv without attempting network operations
 ENV UV_NO_SYNC=1
 ENV VIRTUAL_ENV=/app/.venv
+# Point the app at the pre-baked tiktoken encoding (see open_notebook/config.py)
+ENV TIKTOKEN_CACHE_DIR=/app/tiktoken-cache
 
 # Bind Next.js to all interfaces (required for Docker networking and reverse proxies)
 ENV HOSTNAME=0.0.0.0
