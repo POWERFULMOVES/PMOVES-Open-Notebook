@@ -12,7 +12,7 @@
 ---
 
 ### ☁️ I want to use other cloud AI (Anthropic, Google, OpenRouter, etc.)
-**5 minutes to running.** Choose from 15+ AI providers.
+**5 minutes to running.** Choose from 17+ AI providers.
 
 → [Cloud Providers Quick Start](quick-start-cloud.md)
 
@@ -22,6 +22,8 @@
 **5 minutes to running.** Keep everything private, on your machine. No costs.
 
 → [Local Quick Start](quick-start-local.md)
+
+**Already have Ollama installed?** → [External Ollama Guide](quick-start-external-ollama.md)
 
 ---
 
@@ -39,7 +41,7 @@
 | Feature | Open Notebook | Notebook LM |
 |---------|---|---|
 | **Privacy** | Self-hosted, your control | Cloud, Google's servers |
-| **AI Choice** | 15+ providers | Google's models only |
+| **AI Choice** | 17+ providers | Google's models only |
 | **Podcast Speakers** | 1-4 customizable | 2 only |
 | **Cost** | Completely free | Free (but your data) |
 | **Offline** | Yes  | No |
