@@ -521,8 +521,15 @@ async def discover_with_config(provider: str, config: dict) -> List[dict]:
     if provider in STATIC_MODELS:
         if not api_key and provider != "ollama":
             return []
+        # Classify each static model so STT-only entries (e.g. ElevenLabs
+        # scribe_v1) are not registered with the dialog's global default type
+        # (which defaults to the provider's first modality, TTS).
         return [
-            {"name": m, "provider": provider}
+            {
+                "name": m,
+                "provider": provider,
+                "model_type": classify_model_type(m, provider),
+            }
             for m in STATIC_MODELS[provider]
         ]
 
