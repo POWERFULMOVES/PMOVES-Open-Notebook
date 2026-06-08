@@ -58,12 +58,12 @@ In a world dominated by Artificial Intelligence, having the ability to think �
 
 **Open Notebook empowers you to:**
 - 🔒 **Control your data** - Keep your research private and secure
-- 🤖 **Choose your AI models** - Support for 16+ providers including OpenAI, Anthropic, Ollama, LM Studio, and more
+- 🤖 **Choose your AI models** - Support for 18+ providers including OpenAI, Anthropic, Ollama, LM Studio, and more
 - 📚 **Organize multi-modal content** - PDFs, videos, audio, web pages, and more
 - 🎙️ **Generate professional podcasts** - Advanced multi-speaker podcast generation
 - 🔍 **Search intelligently** - Full-text and vector search across all your content
 - 💬 **Chat with context** - AI conversations powered by your research
-- 🌐 **Multi-language UI** - English, Portuguese, Chinese (Simplified & Traditional), Japanese, and Russian support
+- 🌐 **Multi-language UI** - English, Portuguese, Chinese (Simplified & Traditional), Japanese, Russian, and Bengali support
 
 Learn more about our project at [https://www.open-notebook.ai](https://www.open-notebook.ai)
 
@@ -74,7 +74,7 @@ Learn more about our project at [https://www.open-notebook.ai](https://www.open-
 | Feature | Open Notebook | Google Notebook LM | Advantage |
 |---------|---------------|--------------------|-----------|
 | **Privacy & Control** | Self-hosted, your data | Google cloud only | Complete data sovereignty |
-| **AI Provider Choice** | 16+ providers (OpenAI, Anthropic, Ollama, LM Studio, etc.) | Google models only | Flexibility and cost optimization |
+| **AI Provider Choice** | 18+ providers (OpenAI, Anthropic, Ollama, LM Studio, etc.) | Google models only | Flexibility and cost optimization |
 | **Podcast Speakers** | 1-4 speakers with custom profiles | 2 speakers only | Extreme flexibility |
 | **Content Transformations** | Custom and built-in | Limited options | Unlimited processing power |
 | **API Access** | Full REST API | No API | Complete automation |
@@ -202,18 +202,21 @@ Thanks to the [Esperanto](https://github.com/lfnovo/esperanto) library, we suppo
 | OpenAI       | ✅          | ✅               | ✅             | ✅             |
 | Anthropic    | ✅          | ❌               | ❌             | ❌             |
 | Groq         | ✅          | ❌               | ✅             | ❌             |
-| Google (GenAI) | ✅          | ✅               | ❌             | ✅             |
+| Google (GenAI) | ✅          | ✅               | ✅             | ✅             |
 | Vertex AI    | ✅          | ✅               | ❌             | ✅             |
 | Ollama       | ✅          | ✅               | ❌             | ❌             |
 | Perplexity   | ✅          | ❌               | ❌             | ❌             |
 | ElevenLabs   | ❌          | ❌               | ✅             | ✅             |
-| Azure OpenAI | ✅          | ✅               | ❌             | ❌             |
-| Mistral      | ✅          | ✅               | ❌             | ❌             |
+| Deepgram     | ❌          | ❌               | ❌             | ✅             |
+| Azure OpenAI | ✅          | ✅               | ✅             | ✅             |
+| Mistral      | ✅          | ✅               | ✅             | ✅             |
 | DeepSeek     | ✅          | ❌               | ❌             | ❌             |
 | Voyage       | ❌          | ✅               | ❌             | ❌             |
-| xAI          | ✅          | ❌               | ❌             | ❌             |
-| OpenRouter   | ✅          | ❌               | ❌             | ❌             |
-| OpenAI Compatible* | ✅          | ❌               | ❌             | ❌             |
+| xAI          | ✅          | ❌               | ❌             | ✅             |
+| OpenRouter   | ✅          | ✅               | ❌             | ❌             |
+| DashScope (Qwen) | ✅          | ❌               | ❌             | ❌             |
+| MiniMax      | ✅          | ❌               | ❌             | ❌             |
+| OpenAI Compatible* | ✅          | ✅               | ✅             | ✅             |
 
 *Supports LM Studio and any OpenAI-compatible endpoint
 
@@ -223,7 +226,7 @@ Thanks to the [Esperanto](https://github.com/lfnovo/esperanto) library, we suppo
 - **🔒 Privacy-First**: Your data stays under your control - no cloud dependencies
 - **🎯 Multi-Notebook Organization**: Manage multiple research projects seamlessly
 - **📚 Universal Content Support**: PDFs, videos, audio, web pages, Office docs, and more
-- **🤖 Multi-Model AI Support**: 16+ providers including OpenAI, Anthropic, Ollama, Google, LM Studio, and more
+- **🤖 Multi-Model AI Support**: 18+ providers including OpenAI, Anthropic, Ollama, Google, LM Studio, and more
 - **🎙️ Professional Podcast Generation**: Advanced multi-speaker podcasts with Episode Profiles
 - **🔍 Intelligent Search**: Full-text and vector search across all your content
 - **💬 Context-Aware Chat**: AI conversations powered by your research materials
@@ -280,7 +283,7 @@ Thanks to the [Esperanto](https://github.com/lfnovo/esperanto) library, we suppo
 ### Recently Completed ✅
 - **Next.js Frontend**: Modern React-based frontend with improved performance
 - **Comprehensive REST API**: Full programmatic access to all functionality
-- **Multi-Model Support**: 16+ AI providers including OpenAI, Anthropic, Ollama, LM Studio
+- **Multi-Model Support**: 18+ AI providers including OpenAI, Anthropic, Ollama, LM Studio
 - **Advanced Podcast Generator**: Professional multi-speaker podcasts with Episode Profiles
 - **Content Transformations**: Powerful customizable actions for content processing
 - **Enhanced Citations**: Improved layout and finer control for source citations

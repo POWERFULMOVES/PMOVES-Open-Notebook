@@ -249,6 +249,76 @@ Heavy use: Depends on models chosen
 
 ---
 
+### DashScope (Qwen)
+
+**Cost:** ~$0.01-0.06 per 1K tokens (varies by model)
+
+**Get Your API Key:**
+1. Go to https://dashscope.console.aliyun.com/
+2. Create an Alibaba Cloud account (if needed)
+3. Navigate to API Keys section
+4. Create a new API key
+
+**Configure in Open Notebook:**
+1. Go to **Settings** → **API Keys**
+2. Click **Add Credential**
+3. Select provider: **DashScope (Qwen)**
+4. Give it a name, paste your API key
+5. Click **Save**, then **Test Connection**
+6. Click **Discover Models** → **Register Models**
+
+**Available Models:**
+- `qwen-max` — Most capable Qwen model
+- `qwen-plus` — Good balance of quality and speed
+- `qwen-turbo` — Fastest, cheapest
+
+**Recommended:**
+- For quality: `qwen-max` (best overall)
+- For general use: `qwen-plus` (good balance)
+- For speed/cost: `qwen-turbo` (cheapest)
+
+**Troubleshooting:**
+- "Invalid API key" → Check the key in the DashScope console
+- "Model not available" → Re-discover models from the credential
+
+---
+
+### MiniMax
+
+**Cost:** Varies by model
+
+**Get Your API Key:**
+1. Go to https://platform.minimaxi.com/
+2. Create an account (if needed)
+3. Navigate to API Keys section
+4. Create a new API key
+
+**Configure in Open Notebook:**
+1. Go to **Settings** → **API Keys**
+2. Click **Add Credential**
+3. Select provider: **MiniMax**
+4. Give it a name, paste your API key
+5. Click **Save**, then **Test Connection**
+6. Click **Discover Models** → **Register Models**
+
+**Available Models:**
+- `MiniMax-M2.5` — Most capable, 204K context
+- `MiniMax-M2.5-highspeed` — Faster variant, 204K context
+
+**Recommended:**
+- For quality: `MiniMax-M2.5` (best overall)
+- For speed: `MiniMax-M2.5-highspeed` (faster responses)
+
+**Advantages:**
+- Very long context (204K tokens)
+- Competitive pricing
+
+**Troubleshooting:**
+- "Invalid API key" → Check the key in the MiniMax platform
+- "Model not available" → Re-discover models from the credential
+
+---
+
 ## Self-Hosted / Local
 
 ### Ollama (Recommended for Local)
@@ -273,6 +343,17 @@ Heavy use: Depends on models chosen
 7. Click **Discover Models** → **Register Models**
 
 See [Ollama Setup Guide](ollama.md) for detailed network configuration.
+
+**Context Window (`num_ctx`):**
+
+Ollama models default to a **8,192-token** context window. This default is intentionally
+conservative so models run reliably on consumer GPUs (≈8GB VRAM) without running out of memory.
+If your hardware can handle more, set an optional **Context Window (num_ctx)** value on the
+Ollama credential (Settings → API Keys → edit the Ollama credential). It applies to all models
+that use that credential. Leave it empty to keep the default.
+
+- Raise it (e.g. `32768`) when ingesting large documents or using long chat histories.
+- If you hit "out of memory" errors, lower it or leave it at the default.
 
 **Available Models:**
 - `llama3.3:70b` — Best quality (requires 40GB+ RAM)

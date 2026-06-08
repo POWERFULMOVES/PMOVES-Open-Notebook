@@ -28,9 +28,21 @@ def token_count(input_string: str) -> int:
         encoding = tiktoken.get_encoding("o200k_base")
         tokens = encoding.encode(input_string)
         return len(tokens)
-    except ImportError:
-        # Fallback: simple word count estimation
-        return int(len(input_string.split()) * 1.3)
+    except (ImportError, OSError) as e:
+        # Fallback: handles ImportError (tiktoken not installed) AND network/OS
+        # errors such as urllib.error.URLError or ConnectionError raised in
+        # offline environments when the encoding file cannot be downloaded.
+        from loguru import logger
+
+        logger.warning(
+            "tiktoken unavailable, falling back to word-count estimation: {}", e
+        )
+        # Char-based floor (~4 chars/token) so tokenless text (CJK, base64,
+        # minified) is not undercounted to ~1 "word" and sent to embeddings
+        # unchunked. PMOVES runs offline (tiktoken-cache), so this path matters.
+        word_estimate = int(len(input_string.split()) * 1.3)
+        char_floor = (len(input_string) + 3) // 4
+        return max(word_estimate, char_floor)
 
 
 def token_cost(token_count: int, cost_per_million: float = 0.150) -> float:

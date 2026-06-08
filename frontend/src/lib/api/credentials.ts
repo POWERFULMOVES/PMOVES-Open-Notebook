@@ -16,10 +16,12 @@ export interface Credential {
   project?: string | null
   location?: string | null
   credentials_path?: string | null
+  num_ctx?: number | null
   has_api_key: boolean
   created: string
   updated: string
   model_count: number
+  decryption_error?: string | null
 }
 
 export interface CreateCredentialRequest {
@@ -37,6 +39,7 @@ export interface CreateCredentialRequest {
   project?: string
   location?: string
   credentials_path?: string
+  num_ctx?: number | null
 }
 
 export interface UpdateCredentialRequest {
@@ -53,6 +56,7 @@ export interface UpdateCredentialRequest {
   project?: string
   location?: string
   credentials_path?: string
+  num_ctx?: number | null
 }
 
 export interface DiscoveredModel {

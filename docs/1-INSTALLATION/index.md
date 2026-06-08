@@ -14,13 +14,10 @@ Choose your installation route based on your setup and use case.
 
 ---
 
-### 🏠 I want everything in one container (Simplified)
-**→ [Single Container](single-container.md)** - All-in-one for simple deployments
-- ✅ Minimal configuration
-- ✅ Lower resource usage
-- ✅ Good for shared hosting
-- ✅ Works on PikaPods, Railway, etc.
-- ⏱️ 3 minutes to running
+### 🏠 I want everything in one container (Deprecated)
+**→ [Single Container](single-container.md)** - Deprecated, will be removed in v2
+- ⚠️ **Deprecated** — please use Docker Compose instead
+- Still supported until v2 release
 
 ---
 
@@ -31,6 +28,15 @@ Choose your installation route based on your setup and use case.
 - ✅ Can modify and test
 - ⚠️ Requires Python 3.11+, Node.js
 - ⏱️ 10 minutes to running
+
+---
+
+### 🪟 I'm on Windows and can't use Docker/WSL
+**→ [Windows Native](windows-native.md)** - Run natively, no Docker or WSL
+- ✅ Works on Windows ARM64
+- ✅ For systems without Hyper-V/Docker Desktop
+- ⚠️ Requires Python 3.12+, Node.js, SurrealDB, uv
+- ⏱️ 15 minutes to running
 
 ---
 
@@ -80,7 +86,7 @@ Choose your installation route based on your setup and use case.
 **Already know which way to go?** Pick your installation path:
 
 - [Docker Compose](docker-compose.md) - **Most users**
-- [Single Container](single-container.md) - **Shared hosting**
+- [Single Container](single-container.md) - **Deprecated**
 - [From Source](from-source.md) - **Developers**
 
 > **Privacy-first?** Any installation method works with Ollama for 100% local AI. See [Local Quick Start](../0-START-HERE/quick-start-local.md).
@@ -102,7 +108,7 @@ Before installing, you'll need:
 
 ### For Docker Users
 1. Install [Docker Desktop](https://docker.com/products/docker-desktop)
-2. Choose: [Docker Compose](docker-compose.md) or [Single Container](single-container.md)
+2. Follow [Docker Compose](docker-compose.md) installation
 3. Follow the step-by-step guide
 4. Access at `http://localhost:8502`
 

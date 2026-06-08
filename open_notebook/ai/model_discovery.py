@@ -14,8 +14,8 @@ import httpx
 from loguru import logger
 
 from open_notebook.ai.models import Model
-from open_notebook.domain.credential import Credential
 from open_notebook.database.repository import repo_query
+from open_notebook.domain.credential import Credential
 
 
 @dataclass
@@ -67,6 +67,10 @@ ANTHROPIC_MODELS = {
 GOOGLE_MODEL_TYPES = {
     "language": ["gemini", "palm", "bison", "chat"],
     "embedding": ["embedding", "textembedding"],
+    # Gemini TTS preview models carry "tts" in the name (checked before language).
+    # Google STT reuses plain Gemini names and can't be told apart by name, so it
+    # has no pattern here — users assign the speech_to_text type manually.
+    "text_to_speech": ["tts"],
 }
 
 OLLAMA_MODEL_TYPES = {
@@ -108,6 +112,11 @@ MISTRAL_MODEL_TYPES = {
         "open-mixtral",
     ],
     "embedding": ["mistral-embed"],
+    # Voxtral. TTS first by specificity: the "-tts" model must not be caught by
+    # the broader STT names. classify_model_type checks speech_to_text before
+    # text_to_speech, so STT patterns are the explicit non-tts model names.
+    "text_to_speech": ["voxtral-mini-tts", "voxtral-tts"],
+    "speech_to_text": ["voxtral-mini-latest", "voxtral-small-latest"],
 }
 
 GROQ_MODEL_TYPES = {
@@ -129,6 +138,19 @@ VOYAGE_MODEL_TYPES = {
 
 ELEVENLABS_MODEL_TYPES = {
     "text_to_speech": ["eleven"],
+    "speech_to_text": ["scribe"],
+}
+
+DEEPGRAM_MODEL_TYPES = {
+    "text_to_speech": ["aura"],
+}
+
+DASHSCOPE_MODEL_TYPES = {
+    "language": ["qwen"],
+}
+
+MINIMAX_MODEL_TYPES = {
+    "language": ["minimax", "abab"],
 }
 
 
@@ -150,6 +172,9 @@ def classify_model_type(model_name: str, provider: str) -> str:
         "xai": XAI_MODEL_TYPES,
         "voyage": VOYAGE_MODEL_TYPES,
         "elevenlabs": ELEVENLABS_MODEL_TYPES,
+        "deepgram": DEEPGRAM_MODEL_TYPES,
+        "dashscope": DASHSCOPE_MODEL_TYPES,
+        "minimax": MINIMAX_MODEL_TYPES,
     }
 
     mapping = type_mappings.get(provider, {})
@@ -503,7 +528,7 @@ async def discover_elevenlabs_models() -> List[DiscoveredModel]:
     if not api_key:
         return []
 
-    # ElevenLabs specializes in TTS
+    # ElevenLabs TTS models + the Scribe STT model
     elevenlabs_models = [
         "eleven_multilingual_v2",
         "eleven_turbo_v2_5",
@@ -512,10 +537,114 @@ async def discover_elevenlabs_models() -> List[DiscoveredModel]:
         "eleven_multilingual_v1",
     ]
 
-    return [
+    discovered = [
         DiscoveredModel(name=m, provider="elevenlabs", model_type="text_to_speech")
         for m in elevenlabs_models
     ]
+    discovered.append(
+        DiscoveredModel(
+            name="scribe_v1", provider="elevenlabs", model_type="speech_to_text"
+        )
+    )
+    return discovered
+
+
+async def discover_deepgram_models() -> List[DiscoveredModel]:
+    """Return a curated static list of Deepgram Aura TTS voices.
+
+    Deepgram has no model-listing API and treats each voice as a model id.
+    This is a representative subset of the Aura-2 English catalog; users can
+    add any other voice manually via the custom-model input.
+    """
+    api_key = os.environ.get("DEEPGRAM_API_KEY")
+    if not api_key:
+        return []
+
+    deepgram_voices = [
+        "aura-2-thalia-en",
+        "aura-2-andromeda-en",
+        "aura-2-helena-en",
+        "aura-2-apollo-en",
+        "aura-2-arcas-en",
+        "aura-2-asteria-en",
+        "aura-2-athena-en",
+        "aura-2-hera-en",
+        "aura-2-hermes-en",
+        "aura-2-atlas-en",
+    ]
+
+    return [
+        DiscoveredModel(name=m, provider="deepgram", model_type="text_to_speech")
+        for m in deepgram_voices
+    ]
+
+
+async def discover_dashscope_models() -> List[DiscoveredModel]:
+    """Fetch available models from DashScope (Qwen) API."""
+    api_key = os.environ.get("DASHSCOPE_API_KEY")
+    if not api_key:
+        return []
+
+    models = []
+    try:
+        async with httpx.AsyncClient() as client:
+            response = await client.get(
+                "https://dashscope.aliyuncs.com/compatible-mode/v1/models",
+                headers={"Authorization": f"Bearer {api_key}"},
+                timeout=30.0,
+            )
+            response.raise_for_status()
+            data = response.json()
+
+            for model in data.get("data", []):
+                model_id = model.get("id", "")
+                if model_id:
+                    model_type = classify_model_type(model_id, "dashscope")
+                    models.append(
+                        DiscoveredModel(
+                            name=model_id,
+                            provider="dashscope",
+                            model_type=model_type,
+                        )
+                    )
+    except Exception as e:
+        logger.warning(f"Failed to discover DashScope models: {e}")
+
+    return models
+
+
+async def discover_minimax_models() -> List[DiscoveredModel]:
+    """Fetch available models from MiniMax API."""
+    api_key = os.environ.get("MINIMAX_API_KEY")
+    if not api_key:
+        return []
+
+    models = []
+    try:
+        async with httpx.AsyncClient() as client:
+            response = await client.get(
+                "https://api.minimax.io/v1/models",
+                headers={"Authorization": f"Bearer {api_key}"},
+                timeout=30.0,
+            )
+            response.raise_for_status()
+            data = response.json()
+
+            for model in data.get("data", []):
+                model_id = model.get("id", "")
+                if model_id:
+                    model_type = classify_model_type(model_id, "minimax")
+                    models.append(
+                        DiscoveredModel(
+                            name=model_id,
+                            provider="minimax",
+                            model_type=model_type,
+                        )
+                    )
+    except Exception as e:
+        logger.warning(f"Failed to discover MiniMax models: {e}")
+
+    return models
 
 
 async def discover_openai_compatible_models() -> List[DiscoveredModel]:
@@ -599,7 +728,10 @@ PROVIDER_DISCOVERY_FUNCTIONS = {
     "openrouter": discover_openrouter_models,
     "voyage": discover_voyage_models,
     "elevenlabs": discover_elevenlabs_models,
+    "deepgram": discover_deepgram_models,
     "openai_compatible": discover_openai_compatible_models,
+    "dashscope": discover_dashscope_models,
+    "minimax": discover_minimax_models,
     "azure": None,  # Azure requires credential-based discovery (different auth)
     "vertex": None,  # Vertex requires credential-based discovery (service account)
 }

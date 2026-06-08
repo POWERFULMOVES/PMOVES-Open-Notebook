@@ -576,6 +576,9 @@ class CreateCredentialRequest(BaseModel):
     credentials_path: Optional[str] = Field(
         None, description="Credentials file path (Vertex)"
     )
+    num_ctx: Optional[int] = Field(
+        None, description="Context window size (Ollama only; defaults to 8192)"
+    )
 
 
 class UpdateCredentialRequest(BaseModel):
@@ -594,6 +597,9 @@ class UpdateCredentialRequest(BaseModel):
     project: Optional[str] = Field(None, description="Project ID")
     location: Optional[str] = Field(None, description="Location")
     credentials_path: Optional[str] = Field(None, description="Credentials path")
+    num_ctx: Optional[int] = Field(
+        None, description="Context window size (Ollama only; defaults to 8192)"
+    )
 
 
 class CredentialResponse(BaseModel):
@@ -613,10 +619,12 @@ class CredentialResponse(BaseModel):
     project: Optional[str] = None
     location: Optional[str] = None
     credentials_path: Optional[str] = None
+    num_ctx: Optional[int] = None
     has_api_key: bool = False
     created: str
     updated: str
     model_count: int = 0
+    decryption_error: Optional[str] = None
 
 
 class CredentialDeleteResponse(BaseModel):
