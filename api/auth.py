@@ -78,6 +78,22 @@ class PasswordAuthMiddleware(BaseHTTPMiddleware):
         return response
 
 
+class RemoteUserMiddleware(PasswordAuthMiddleware):
+    """Trust the reverse-proxy `Remote-User` header, set ONLY by the PMOVES
+    Traefik forward-auth edge (the app publishes no host port, so the header
+    cannot arrive except through the proxy). When present, the SSO gateway has
+    already authenticated the user — set request.state.user and pass through.
+    When ABSENT (direct/non-proxied access), fall back to the inherited password
+    check so nothing is ever served unauthenticated."""
+
+    async def dispatch(self, request: Request, call_next):
+        remote_user = request.headers.get("Remote-User")
+        if remote_user:
+            request.state.user = remote_user
+            return await call_next(request)
+        return await super().dispatch(request, call_next)
+
+
 # Optional: HTTPBearer security scheme for OpenAPI documentation
 security = HTTPBearer(auto_error=False)
 

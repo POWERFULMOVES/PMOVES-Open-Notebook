@@ -14,7 +14,7 @@ from starlette.exceptions import HTTPException as StarletteHTTPException
 
 from prometheus_client import make_asgi_app
 
-from api.auth import PasswordAuthMiddleware
+from api.auth import RemoteUserMiddleware
 from api.routers import (
     auth,
     chat,
@@ -186,7 +186,7 @@ else:
 # Add password authentication middleware first
 # Exclude /api/auth/status and /api/config from authentication
 app.add_middleware(
-    PasswordAuthMiddleware,
+    RemoteUserMiddleware,
     excluded_paths=[
         "/",
         "/health",
