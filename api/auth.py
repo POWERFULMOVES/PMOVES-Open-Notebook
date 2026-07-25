@@ -1,3 +1,4 @@
+import hmac
 from typing import Optional
 
 from fastapi import Depends, HTTPException, Request
@@ -78,19 +79,46 @@ class PasswordAuthMiddleware(BaseHTTPMiddleware):
         return response
 
 
+def _valid_remote_user(value: str) -> bool:
+    """Reject empty / over-long / non-printable Remote-User values before trusting
+    them (a forged header could carry control chars or absurd length)."""
+    return bool(value) and len(value) <= 320 and value.isprintable()
+
+
 class RemoteUserMiddleware(PasswordAuthMiddleware):
-    """Trust the reverse-proxy `Remote-User` header, set ONLY by the PMOVES
-    Traefik forward-auth edge (the app publishes no host port, so the header
-    cannot arrive except through the proxy). When present, the SSO gateway has
-    already authenticated the user — set request.state.user and pass through.
-    When ABSENT (direct/non-proxied access), fall back to the inherited password
-    check so nothing is ever served unauthenticated."""
+    """Trust the reverse-proxy `Remote-User` header ONLY with proof the request
+    actually transited the PMOVES Traefik forward-auth edge. Trusting a bare
+    header is an auth bypass — any peer that reaches this app off-proxy could
+    forge `Remote-User`. So the header is honored only when ALL hold:
+
+      1. TRUST_REMOTE_USER_HEADER is explicitly enabled (fail-closed default —
+         without it this behaves exactly like PasswordAuthMiddleware), AND
+      2. a proof-of-proxy secret is configured (SSO_FORWARD_AUTH_SECRET), AND
+      3. the request carries X-Forward-Auth-Secret matching it (constant-time) —
+         the SSO edge injects this and Traefik overwrites any client value, so a
+         peer bypassing the proxy cannot produce it, AND
+      4. the Remote-User value is well-formed.
+
+    Any failure falls back to the inherited password check — nothing is ever
+    served unauthenticated."""
+
+    def __init__(self, app, excluded_paths: Optional[list] = None):
+        super().__init__(app, excluded_paths)
+        raw = (get_secret_from_env("TRUST_REMOTE_USER_HEADER") or "").strip().lower()
+        self.trust_header = raw in ("1", "true", "yes", "on")
+        self.forward_auth_secret = get_secret_from_env("SSO_FORWARD_AUTH_SECRET")
 
     async def dispatch(self, request: Request, call_next):
-        remote_user = request.headers.get("Remote-User")
-        if remote_user:
-            request.state.user = remote_user
-            return await call_next(request)
+        if self.trust_header and self.forward_auth_secret:
+            remote_user = request.headers.get("Remote-User", "")
+            proxy_secret = request.headers.get("X-Forward-Auth-Secret", "")
+            if (
+                _valid_remote_user(remote_user)
+                and hmac.compare_digest(proxy_secret, self.forward_auth_secret)
+            ):
+                request.state.user = remote_user
+                return await call_next(request)
+        # Not proven to come from the proxy — fall back to the password check.
         return await super().dispatch(request, call_next)
 
 
