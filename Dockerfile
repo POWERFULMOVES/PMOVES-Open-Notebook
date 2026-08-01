@@ -120,8 +120,8 @@ ENV HF_HOME=/app/data/.cache/huggingface
 
 # Data directory (volume-mounted by users) and supervisor log directory
 RUN mkdir -p /app/data /var/log/supervisor \
-RUN chown -R opennotebook:opennotebook /app /app/data /var/log/supervisor
     && chmod +x /app/scripts/wait-for-api.sh /app/scripts/docker-entrypoint.sh
+RUN chown -R opennotebook:opennotebook /app /app/data /var/log/supervisor
 
 # Copy supervisord configuration (shared programs: api, worker, frontend)
 COPY supervisord.conf /etc/supervisor/conf.d/supervisord.conf
