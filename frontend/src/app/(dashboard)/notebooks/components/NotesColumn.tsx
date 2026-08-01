@@ -10,7 +10,7 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu'
-import { Plus, StickyNote, Bot, User, MoreVertical, Trash2 } from 'lucide-react'
+import { Plus, StickyNote, Bot, User, MoreVertical, Trash2, ListChecks, ChevronDown } from 'lucide-react'
 import { LoadingSpinner } from '@/components/common/LoadingSpinner'
 import { EmptyState } from '@/components/common/EmptyState'
 import { Badge } from '@/components/ui/badge'
@@ -18,7 +18,8 @@ import { NoteEditorDialog } from './NoteEditorDialog'
 import { getDateLocale } from '@/lib/utils/date-locale'
 import { formatDistanceToNow } from 'date-fns'
 import { ContextToggle } from '@/components/common/ContextToggle'
-import { ContextMode } from '../[id]/page'
+import type { NoteContextMode } from '../[id]/page'
+import type { NoteContextDefault } from '@/lib/utils/source-context'
 import { useDeleteNote } from '@/lib/hooks/use-notes'
 import { ConfirmDialog } from '@/components/common/ConfirmDialog'
 import { CollapsibleColumn, createCollapseButton } from '@/components/notebooks/CollapsibleColumn'
@@ -29,8 +30,9 @@ interface NotesColumnProps {
   notes?: NoteResponse[]
   isLoading: boolean
   notebookId: string
-  contextSelections?: Record<string, ContextMode>
-  onContextModeChange?: (noteId: string, mode: ContextMode) => void
+  contextSelections?: Record<string, NoteContextMode>
+  onContextModeChange?: (noteId: string, mode: NoteContextMode) => void
+  onBulkContextModeChange?: (action: NoteContextDefault) => void
 }
 
 export function NotesColumn({
@@ -38,7 +40,8 @@ export function NotesColumn({
   isLoading,
   notebookId,
   contextSelections,
-  onContextModeChange
+  onContextModeChange,
+  onBulkContextModeChange
 }: NotesColumnProps) {
   const { t, language } = useTranslation()
   const [showAddDialog, setShowAddDialog] = useState(false)
@@ -50,9 +53,10 @@ export function NotesColumn({
 
   // Collapsible column state
   const { notesCollapsed, toggleNotes } = useNotebookColumnsStore()
+  const notesLabel = t('common.notes')
   const collapseButton = useMemo(
-    () => createCollapseButton(toggleNotes, t('common.notes')),
-    [toggleNotes, t('common.notes')]
+    () => createCollapseButton(toggleNotes, notesLabel),
+    [toggleNotes, notesLabel]
   )
 
   const handleDeleteClick = (noteId: string) => {
@@ -78,13 +82,34 @@ export function NotesColumn({
         isCollapsed={notesCollapsed}
         onToggle={toggleNotes}
         collapsedIcon={StickyNote}
-        collapsedLabel={t('common.notes')}
+        collapsedLabel={notesLabel}
       >
         <Card className="h-full flex flex-col flex-1 overflow-hidden">
           <CardHeader className="pb-3 flex-shrink-0">
             <div className="flex items-center justify-between gap-2">
-              <CardTitle className="text-lg">{t('common.notes')}</CardTitle>
+              <CardTitle className="flex items-center gap-2 text-xs font-semibold uppercase tracking-[0.13em] text-muted-foreground">
+                <span aria-hidden className="h-3.5 w-[3px] rounded-full bg-gold" />
+                {notesLabel}
+              </CardTitle>
               <div className="flex items-center gap-2">
+                {onBulkContextModeChange && notes && notes.length > 0 && (
+                  <DropdownMenu>
+                    <DropdownMenuTrigger asChild>
+                      <Button variant="ghost" size="sm" className="text-muted-foreground" title={t('sources.bulkContext')}>
+                        <ListChecks className="h-4 w-4" />
+                        <ChevronDown className="h-4 w-4 ml-1" />
+                      </Button>
+                    </DropdownMenuTrigger>
+                    <DropdownMenuContent align="end">
+                      <DropdownMenuItem onClick={() => onBulkContextModeChange('include')}>
+                        {t('sources.includeAllInContext')}
+                      </DropdownMenuItem>
+                      <DropdownMenuItem onClick={() => onBulkContextModeChange('exclude')}>
+                        {t('sources.excludeAllFromContext')}
+                      </DropdownMenuItem>
+                    </DropdownMenuContent>
+                  </DropdownMenu>
+                )}
                 <Button
                   size="sm"
                   onClick={() => {
@@ -112,17 +137,17 @@ export function NotesColumn({
                 description={t('sources.createFirstNote')}
               />
             ) : (
-              <div className="space-y-3">
+              <div className="space-y-2">
                 {notes.map((note) => (
                   <div
                     key={note.id}
-                    className="p-3 border rounded-lg card-hover group relative cursor-pointer"
+                    className="p-3 border rounded-md bg-card shadow-none card-hover group relative cursor-pointer"
                     onClick={() => setEditingNote(note)}
                   >
                     <div className="flex items-start justify-between mb-2">
                       <div className="flex items-center gap-2">
                         {note.note_type === 'ai' ? (
-                          <Bot className="h-4 w-4 text-primary" />
+                          <Bot className="h-4 w-4 text-teal" />
                         ) : (
                           <User className="h-4 w-4 text-muted-foreground" />
                         )}
@@ -168,7 +193,7 @@ export function NotesColumn({
                                 e.stopPropagation()
                                 handleDeleteClick(note.id)
                               }}
-                              className="text-red-600 focus:text-red-600"
+                              className="text-destructive focus:text-destructive"
                             >
                               <Trash2 className="h-4 w-4 mr-2" />
                               {t('notebooks.deleteNote')}

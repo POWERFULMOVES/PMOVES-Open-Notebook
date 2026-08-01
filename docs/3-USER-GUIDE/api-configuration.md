@@ -102,6 +102,7 @@ Navigation: Settings → API Keys
 | Provider | Required Fields | Notes |
 |----------|-----------------|-------|
 | Ollama | Base URL | Typically `http://localhost:11434` or `http://ollama:11434` |
+| oMLX | Base URL | Default `http://localhost:11435/v1` (avoids SurrealDB on 8000); API key optional |
 
 ### Enterprise
 
@@ -206,6 +207,15 @@ For OpenAI, Anthropic, Google, Groq, Mistral, DeepSeek, xAI, OpenRouter:
 
 Ollama allows localhost and private IPs since it runs locally.
 
+### oMLX (Apple Silicon)
+
+1. Add credential with provider **oMLX**
+2. Base URL defaults to `http://localhost:11435/v1` (do not use port `8000` — that conflicts with SurrealDB)
+3. API key is optional
+4. Test connection → discover and register language/embedding models
+
+See [oMLX Setup](../5-CONFIGURATION/omlx.md) for install and Docker host networking notes.
+
 ### Azure OpenAI
 
 1. Add credential with provider **Azure OpenAI**
@@ -302,7 +312,7 @@ API keys stored in the database are encrypted using Fernet (AES-128-CBC + HMAC-S
 
 | Setting | Default Value | Production Recommendation |
 |---------|---------------|---------------------------|
-| Password | `open-notebook-change-me` | Set `OPEN_NOTEBOOK_PASSWORD` |
+| Password | None - auth is fully disabled until set | Set `OPEN_NOTEBOOK_PASSWORD` |
 | Encryption Key | None (must be set) | Set `OPEN_NOTEBOOK_ENCRYPTION_KEY` to any secret string |
 
 **For production deployments, always set custom credentials.**

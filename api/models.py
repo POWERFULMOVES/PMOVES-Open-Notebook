@@ -28,11 +28,18 @@ class NotebookResponse(BaseModel):
     note_count: int
 
 
+class RecentlyViewedResponse(BaseModel):
+    type: Literal["notebook", "source"]
+    id: str
+    title: str
+    last_viewed_at: str
+
+
 # Search models
 class SearchRequest(BaseModel):
     query: str = Field(..., description="Search query")
     type: Literal["text", "vector"] = Field("text", description="Search type")
-    limit: int = Field(100, description="Maximum number of results", le=1000)
+    limit: int = Field(100, description="Maximum number of results", ge=1, le=1000)
     search_sources: bool = Field(True, description="Include sources in search")
     search_notes: bool = Field(True, description="Include notes in search")
     minimum_score: float = Field(
@@ -112,6 +119,9 @@ class TransformationCreate(BaseModel):
     apply_default: bool = Field(
         False, description="Whether to apply this transformation by default"
     )
+    model_id: Optional[str] = Field(
+        None, description="Model ID to use by default for this transformation"
+    )
 
 
 class TransformationUpdate(BaseModel):
@@ -126,6 +136,9 @@ class TransformationUpdate(BaseModel):
     apply_default: Optional[bool] = Field(
         None, description="Whether to apply this transformation by default"
     )
+    model_id: Optional[str] = Field(
+        None, description="Model ID to use by default for this transformation"
+    )
 
 
 class TransformationResponse(BaseModel):
@@ -135,6 +148,7 @@ class TransformationResponse(BaseModel):
     description: str
     prompt: str
     apply_default: bool
+    model_id: Optional[str] = None
     created: str
     updated: str
 
@@ -146,7 +160,9 @@ class TransformationExecuteRequest(BaseModel):
         ..., description="ID of the transformation to execute"
     )
     input_text: str = Field(..., description="Text to transform")
-    model_id: str = Field(..., description="Model ID to use for the transformation")
+    model_id: Optional[str] = Field(
+        None, description="Model ID to use for this transformation run"
+    )
 
 
 class TransformationExecuteResponse(BaseModel):
@@ -154,7 +170,7 @@ class TransformationExecuteResponse(BaseModel):
 
     output: str = Field(..., description="Transformed text")
     transformation_id: str = Field(..., description="ID of the transformation used")
-    model_id: str = Field(..., description="Model ID used")
+    model_id: Optional[str] = Field(None, description="Model ID used")
 
 
 # Default Prompt API models
@@ -261,6 +277,9 @@ class SettingsResponse(BaseModel):
     default_content_processing_engine_url: Optional[str] = None
     default_embedding_option: Optional[str] = None
     auto_delete_files: Optional[str] = None
+    docling_ocr: Optional[bool] = None
+    docling_formulas: Optional[bool] = None
+    docling_vision: Optional[bool] = None
     youtube_preferred_languages: Optional[List[str]] = None
 
 
@@ -269,6 +288,9 @@ class SettingsUpdate(BaseModel):
     default_content_processing_engine_url: Optional[str] = None
     default_embedding_option: Optional[str] = None
     auto_delete_files: Optional[str] = None
+    docling_ocr: Optional[bool] = None
+    docling_formulas: Optional[bool] = None
+    docling_vision: Optional[bool] = None
     youtube_preferred_languages: Optional[List[str]] = None
 
 
@@ -285,7 +307,9 @@ class SourceCreate(BaseModel):
     )
     # New multi-notebook support
     notebooks: Optional[List[str]] = Field(
-        None, description="List of notebook IDs to add the source to"
+        None,
+        max_length=50,
+        description="List of notebook IDs to add the source to (max 50)",
     )
     # Required fields
     type: str = Field(..., description="Source type: link, upload, or text")
@@ -294,7 +318,9 @@ class SourceCreate(BaseModel):
     content: Optional[str] = Field(None, description="Text content for text type")
     title: Optional[str] = Field(None, description="Source title")
     transformations: Optional[List[str]] = Field(
-        default_factory=list, description="Transformation IDs to apply"
+        default_factory=list,
+        max_length=50,
+        description="Transformation IDs to apply (max 50)",
     )
     embed: bool = Field(False, description="Whether to embed content for vector search")
     delete_source: bool = Field(
@@ -366,38 +392,16 @@ class SourceListResponse(BaseModel):
     processing_info: Optional[Dict[str, Any]] = None
 
 
-# Context API models
-class ContextConfig(BaseModel):
-    sources: Dict[str, str] = Field(
-        default_factory=dict, description="Source inclusion config {source_id: level}"
-    )
-    notes: Dict[str, str] = Field(
-        default_factory=dict, description="Note inclusion config {note_id: level}"
-    )
-
-
-class ContextRequest(BaseModel):
-    notebook_id: str = Field(..., description="Notebook ID to get context for")
-    context_config: Optional[ContextConfig] = Field(
-        None, description="Context configuration"
-    )
-
-
-class ContextResponse(BaseModel):
-    notebook_id: str
-    sources: List[Dict[str, Any]] = Field(..., description="Source context data")
-    notes: List[Dict[str, Any]] = Field(..., description="Note context data")
-    total_tokens: Optional[int] = Field(None, description="Estimated token count")
-
-
 # Insights API models
 class SourceInsightResponse(BaseModel):
     id: str
     source_id: str
     insight_type: str
     content: str
-    created: str
-    updated: str
+    # Optional: insights created before migration 19 have no timestamps,
+    # and the API must return null for them (never the string "None").
+    created: Optional[str] = None
+    updated: Optional[str] = None
 
 
 class InsightCreationResponse(BaseModel):
@@ -447,12 +451,8 @@ class SetApiKeyRequest(BaseModel):
     base_url: Optional[str] = Field(
         None, description="Base URL for URL-based providers (Ollama, OpenAI-compatible)"
     )
-    endpoint: Optional[str] = Field(
-        None, description="Endpoint URL for Azure OpenAI"
-    )
-    api_version: Optional[str] = Field(
-        None, description="API version for Azure OpenAI"
-    )
+    endpoint: Optional[str] = Field(None, description="Endpoint URL for Azure OpenAI")
+    api_version: Optional[str] = Field(None, description="API version for Azure OpenAI")
     endpoint_llm: Optional[str] = Field(
         None, description="Service-specific endpoint for LLM (Azure)"
     )
@@ -554,11 +554,104 @@ class MigrationResult(BaseModel):
 
 # Notebook delete cascade models
 # Credential models
+
+# Kept in sync with the provider registry
+# (open_notebook/ai/provider_registry.py PROVIDERS — the backend source of
+# truth). A Literal can't be built at runtime, so this is the one remaining
+# manual copy; tests/test_credential_provider_validation.py enforces the sync.
+# The frontend consumes GET /api/providers at runtime and needs no edit.
+SupportedProvider = Literal[
+    "openai",
+    "anthropic",
+    "google",
+    "groq",
+    "mistral",
+    "deepseek",
+    "xai",
+    "openrouter",
+    "dashscope",
+    "minimax",
+    "novita",
+    "ppq",
+    "cohere",
+    "voyage",
+    "elevenlabs",
+    "deepgram",
+    "ollama",
+    "omlx",
+    "azure",
+    "vertex",
+    "openai_compatible",
+    "anthropic_compatible",
+]
+
+
+class ProviderInfoResponse(BaseModel):
+    """Provider metadata from the provider registry."""
+
+    name: str = Field(..., description="Provider identifier (e.g. openai)")
+    display_name: str = Field(..., description="Human-friendly provider name")
+    modalities: List[str] = Field(
+        ..., description="Default modalities supported by the provider"
+    )
+    docs_url: Optional[str] = Field(
+        None, description="Where to get an API key / set the provider up"
+    )
+    env_configured: bool = Field(
+        ..., description="Whether the provider is configured via environment variables"
+    )
+
+
+class CapabilitiesResponse(BaseModel):
+    """Runtime availability of the opt-in heavy extraction engines.
+
+    Reflects what is actually importable/reachable in this container — not merely
+    what the OPEN_NOTEBOOK_ENABLE_* flags request — so the UI can gate engine
+    options honestly (e.g. still show "unavailable" while a first-boot install
+    is in progress). See docs/7-DEVELOPMENT/decisions/ADR-007-optin-runtimes.md.
+    """
+
+    docling_available: bool = Field(
+        ...,
+        description="Docling is installed: the docling document engine, OCR toggle and image sources work.",
+    )
+    crawl4ai_available: bool = Field(
+        ...,
+        description="Crawl4AI is usable: the local package is installed OR a remote server is configured.",
+    )
+    crawl4ai_remote_configured: bool = Field(
+        ...,
+        description="A remote Crawl4AI endpoint is configured via CRAWL4AI_API_URL (no local install needed).",
+    )
+
+
+def validate_url_key_provider_required_fields(
+    provider: Optional[str],
+    base_url: Optional[str],
+    api_key: Optional[str],
+) -> None:
+    """Shared required-field rule for providers that need BOTH a base URL and an
+    API key (currently anthropic_compatible).
+
+    Called from both the create path (CreateCredentialRequest validator, which sees
+    the full request payload) and the update path
+    (credentials_service.ensure_provider_required_fields, which runs against the
+    merged credential). Raises ValueError when a required field is missing.
+    """
+    if (provider or "").lower() == "anthropic_compatible":
+        if not base_url or not str(base_url).strip():
+            raise ValueError("Anthropic-compatible credentials require a base URL")
+        if not api_key or not str(api_key).strip():
+            raise ValueError("Anthropic-compatible credentials require an API key")
+
+
 class CreateCredentialRequest(BaseModel):
     """Request to create a new credential."""
 
     name: str = Field(..., description="Credential name")
-    provider: str = Field(..., description="Provider name (openai, anthropic, etc.)")
+    provider: SupportedProvider = Field(
+        ..., description="Provider name (openai, anthropic, etc.)"
+    )
     modalities: List[str] = Field(
         default_factory=list,
         description="Supported modalities (language, embedding, text_to_speech, speech_to_text)",
@@ -579,6 +672,13 @@ class CreateCredentialRequest(BaseModel):
     num_ctx: Optional[int] = Field(
         None, description="Context window size (Ollama only; defaults to 8192)"
     )
+
+    @model_validator(mode="after")
+    def _validate_provider_required_fields(self):
+        validate_url_key_provider_required_fields(
+            self.provider, self.base_url, self.api_key
+        )
+        return self
 
 
 class UpdateCredentialRequest(BaseModel):
@@ -690,4 +790,7 @@ class NotebookDeleteResponse(BaseModel):
     deleted_sources: int = Field(..., description="Number of exclusive sources deleted")
     unlinked_sources: int = Field(
         ..., description="Number of sources unlinked from notebook"
+    )
+    deleted_chat_sessions: int = Field(
+        ..., description="Number of chat sessions deleted"
     )

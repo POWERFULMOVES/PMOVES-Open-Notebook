@@ -229,8 +229,8 @@ export function AddExistingSourceDialog({
                   return (
                     <div
                       key={source.id}
-                      className={`flex items-start gap-3 p-3 rounded-lg border transition-colors min-w-0 ${
-                        isSelected ? 'bg-accent border-accent-foreground/20' : 'hover:bg-accent/50'
+                      className={`flex items-start gap-3 p-3 rounded-md transition-colors min-w-0 ${
+                        isSelected ? 'bg-accent' : 'hover:bg-accent/50'
                       }`}
                     >
                       <Checkbox
@@ -254,7 +254,7 @@ export function AddExistingSourceDialog({
                           )}
                         </div>
                         <p className="text-xs text-muted-foreground truncate">
-                          {t('sources.added').replace('{date}', formatDate(source.created))}
+                          {t('sources.added', { date: formatDate(source.created) })}
                         </p>
                       </div>
                     </div>
@@ -266,15 +266,15 @@ export function AddExistingSourceDialog({
 
           {/* Truncation Warning */}
           {allSources.length >= 100 && !debouncedSearchQuery && (
-            <div className="text-xs text-muted-foreground bg-muted/50 p-2 rounded-md">
+            <p className="text-xs text-muted-foreground">
               {t('sources.showingFirst100')}
-            </div>
+            </p>
           )}
 
           {/* Selection Summary */}
           {selectedSourceIds.length > 0 && (
             <div className="text-sm text-muted-foreground">
-              {t('sources.selectedCount').replace('{count}', selectedSourceIds.length.toString())}
+              {t('sources.selectedCount', { count: selectedSourceIds.length })}
             </div>
           )}
         </div>

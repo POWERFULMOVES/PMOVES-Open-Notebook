@@ -19,7 +19,15 @@ interface ContextToggleProps {
   className?: string
 }
 
-export function ContextToggle({ mode, hasInsights = false, onChange, className }: ContextToggleProps) {
+export function ContextToggle<TMode extends ContextMode = ContextMode>({
+  mode,
+  hasInsights = false,
+  onChange,
+  className
+}: Omit<ContextToggleProps, 'mode' | 'onChange'> & {
+  mode: TMode
+  onChange: (mode: TMode) => void
+}) {
   const { t } = useTranslation()
 
   const MODE_CONFIG = {
@@ -32,23 +40,23 @@ export function ContextToggle({ mode, hasInsights = false, onChange, className }
     insights: {
       icon: Lightbulb,
       label: t('common.contextModes.insights'),
-      color: 'text-amber-600',
-      bgColor: 'hover:bg-amber-50'
+      color: 'text-ctx-insights',
+      bgColor: 'hover:bg-ctx-insights-tint'
     },
     full: {
       icon: FileText,
       label: t('common.contextModes.full'),
-      color: 'text-primary',
-      bgColor: 'hover:bg-primary/10'
+      color: 'text-ctx-full',
+      bgColor: 'hover:bg-ctx-full-tint'
     }
   } as const
   const config = MODE_CONFIG[mode]
   const Icon = config.icon
 
   // Determine available modes based on whether item has insights
-  const availableModes: ContextMode[] = hasInsights
+  const availableModes = (hasInsights
     ? ['off', 'insights', 'full']
-    : ['off', 'full']
+    : ['off', 'full']) as TMode[]
 
   const handleClick = (e: React.MouseEvent) => {
     e.stopPropagation() // Prevent card click
