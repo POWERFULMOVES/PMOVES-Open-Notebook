@@ -158,8 +158,8 @@ export default function SearchPage() {
 
   return (
     <AppShell>
-      <div className="p-4 md:p-6">
-        <h1 className="text-xl md:text-2xl font-bold mb-4 md:mb-6">{t('searchPage.askAndSearch')}</h1>
+      <div className="flex-1 overflow-y-auto p-4 md:p-6">
+        <h1 className="font-display text-xl md:text-2xl font-bold tracking-tight mb-4 md:mb-6">{t('searchPage.askAndSearch')}</h1>
 
         <Tabs value={activeTab} onValueChange={(v) => setActiveTab(v as 'ask' | 'search')} className="w-full space-y-6">
           <div className="space-y-2">
@@ -210,7 +210,7 @@ export default function SearchPage() {
 
                 {/* Models Display */}
                 {!hasEmbeddingModel ? (
-                  <div className="flex items-center gap-2 p-3 text-sm text-amber-600 dark:text-amber-500 bg-amber-50 dark:bg-amber-950/20 rounded-md">
+                  <div className="flex items-center gap-2 p-3 text-sm text-warn bg-warn-tint rounded-md">
                     <AlertCircle className="h-4 w-4" />
                     <span>{t('searchPage.noEmbeddingModel')}</span>
                   </div>
@@ -233,13 +233,13 @@ export default function SearchPage() {
                         </Button>
                       </div>
                       <div className="flex gap-2 text-xs flex-wrap">
-                        <Badge variant="secondary">
+                        <Badge variant="secondary" className="font-mono text-[11px]">
                           {t('searchPage.strategy')}: {resolveModelName(customModels?.strategy || modelDefaults?.default_chat_model)}
                         </Badge>
-                        <Badge variant="secondary">
+                        <Badge variant="secondary" className="font-mono text-[11px]">
                           {t('searchPage.answer')}: {resolveModelName(customModels?.answer || modelDefaults?.default_chat_model)}
                         </Badge>
-                        <Badge variant="secondary">
+                        <Badge variant="secondary" className="font-mono text-[11px]">
                           {t('searchPage.final')}: {resolveModelName(customModels?.finalAnswer || modelDefaults?.default_chat_model)}
                         </Badge>
                       </div>
@@ -358,7 +358,7 @@ export default function SearchPage() {
                   <div className="space-y-2" role="group" aria-labelledby="search-type-label">
                     <span id="search-type-label" className="text-sm font-medium leading-none">{t('searchPage.searchType')}</span>
                     {!hasEmbeddingModel && (
-                      <div className="flex items-center gap-2 text-sm text-amber-600 dark:text-amber-500">
+                      <div className="flex items-center gap-2 text-sm text-warn">
                         <AlertCircle className="h-4 w-4" />
                         <span>{t('searchPage.vectorSearchWarning')}</span>
                       </div>
@@ -428,7 +428,7 @@ export default function SearchPage() {
                   <div className="mt-6 space-y-3">
                     <div className="flex items-center justify-between">
                       <h3 className="text-sm font-medium">
-                        {t('searchPage.resultsFound').replace('{count}', searchMutation.data.total_count.toString())}
+                        {t('searchPage.resultsFound', { count: searchMutation.data.total_count })}
                       </h3>
                       <Badge variant="outline">{searchMutation.data.search_type === 'text' ? t('searchPage.textSearch') : t('searchPage.vectorSearch')}</Badge>
                     </div>
@@ -436,11 +436,11 @@ export default function SearchPage() {
                     {searchMutation.data.results.length === 0 ? (
                       <Card>
                         <CardContent className="pt-6 text-center text-muted-foreground">
-                          {t('searchPage.noResultsFor').replace('{query}', searchQuery)}
+                          {t('searchPage.noResultsFor', { query: searchQuery })}
                         </CardContent>
                       </Card>
                     ) : (
-                      <div className="space-y-2 max-h-[60vh] overflow-y-auto pr-2">
+                      <div className="space-y-2">
                         {searchMutation.data.results.map((result, index) => {
                           // Parse type from parent_id (format: "source:id" or "note:id" or "source_insight:id")
                           // Handle null parent_id gracefully (orphaned records)
@@ -452,7 +452,7 @@ export default function SearchPage() {
                           const modalType = type === 'source_insight' ? 'insight' : type as 'source' | 'note' | 'insight'
 
                           return (
-                          <Card key={index}>
+                          <Card key={index} className="transition-shadow hover:shadow-lift">
                             <CardContent className="pt-4">
                               <div className="flex items-start justify-between gap-4">
                                 <div className="flex-1">
@@ -462,7 +462,7 @@ export default function SearchPage() {
                                   >
                                     {result.title}
                                   </button>
-                                  <Badge variant="secondary" className="ml-2">
+                                  <Badge variant="secondary" className="ml-2 font-mono text-[11px]">
                                     {result.final_score.toFixed(2)}
                                   </Badge>
                                 </div>
@@ -472,7 +472,7 @@ export default function SearchPage() {
                                 <Collapsible className="mt-3">
                                   <CollapsibleTrigger className="flex items-center gap-2 text-sm text-muted-foreground hover:text-foreground">
                                     <ChevronDown className="h-4 w-4" />
-                                    {t('searchPage.matches').replace('{count}', result.matches.length.toString())}
+                                    {t('searchPage.matches', { count: result.matches.length })}
                                   </CollapsibleTrigger>
                                   <CollapsibleContent className="mt-2 space-y-1">
                                     {result.matches.map((match, i) => (

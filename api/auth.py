@@ -1,11 +1,12 @@
 import hmac
+import secrets
 from typing import Optional
 
 from fastapi import Depends, HTTPException, Request
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
-from loguru import logger
-from starlette.middleware.base import BaseHTTPMiddleware
-from starlette.responses import JSONResponse
+from starlette.middleware.base import BaseHTTPMiddleware, RequestResponseEndpoint
+from starlette.responses import JSONResponse, Response
+from starlette.types import ASGIApp
 
 from open_notebook.utils.encryption import get_secret_from_env
 
@@ -13,14 +14,18 @@ from open_notebook.utils.encryption import get_secret_from_env
 class PasswordAuthMiddleware(BaseHTTPMiddleware):
     """
     Middleware to check password authentication for all API requests.
-    Always active with default password if OPEN_NOTEBOOK_PASSWORD is not set.
+    Fail-closed: if OPEN_NOTEBOOK_PASSWORD is not set, every request is denied
+    (500) rather than served unauthenticated (PMOVES hardening — upstream skips
+    auth when unset).
     Supports Docker secrets via OPEN_NOTEBOOK_PASSWORD_FILE.
     """
 
-    def __init__(self, app, excluded_paths: Optional[list] = None):
+    def __init__(
+        self, app: ASGIApp, excluded_paths: Optional[list[str]] = None
+    ) -> None:
         super().__init__(app)
         self.password = get_secret_from_env("OPEN_NOTEBOOK_PASSWORD")
-        self.excluded_paths = excluded_paths or [
+        self.excluded_paths: list[str] = excluded_paths or [
             "/",
             "/health",
             "/docs",
@@ -28,7 +33,9 @@ class PasswordAuthMiddleware(BaseHTTPMiddleware):
             "/redoc",
         ]
 
-    async def dispatch(self, request: Request, call_next):
+    async def dispatch(
+        self, request: Request, call_next: RequestResponseEndpoint
+    ) -> Response:
         # Fail-closed: if no password is configured, deny all requests
         if not self.password:
             return JSONResponse(
@@ -66,8 +73,10 @@ class PasswordAuthMiddleware(BaseHTTPMiddleware):
                 headers={"WWW-Authenticate": "Bearer"},
             )
 
-        # Check password
-        if credentials != self.password:
+        # Check password (constant-time to avoid a timing side-channel)
+        if not secrets.compare_digest(
+            credentials.encode("utf-8"), self.password.encode("utf-8")
+        ):
             return JSONResponse(
                 status_code=401,
                 content={"detail": "Invalid password"},
@@ -102,13 +111,17 @@ class RemoteUserMiddleware(PasswordAuthMiddleware):
     Any failure falls back to the inherited password check — nothing is ever
     served unauthenticated."""
 
-    def __init__(self, app, excluded_paths: Optional[list] = None):
+    def __init__(
+        self, app: ASGIApp, excluded_paths: Optional[list[str]] = None
+    ) -> None:
         super().__init__(app, excluded_paths)
         raw = (get_secret_from_env("TRUST_REMOTE_USER_HEADER") or "").strip().lower()
         self.trust_header = raw in ("1", "true", "yes", "on")
         self.forward_auth_secret = get_secret_from_env("SSO_FORWARD_AUTH_SECRET")
 
-    async def dispatch(self, request: Request, call_next):
+    async def dispatch(
+        self, request: Request, call_next: RequestResponseEndpoint
+    ) -> Response:
         if self.trust_header and self.forward_auth_secret:
             remote_user = request.headers.get("Remote-User", "")
             proxy_secret = request.headers.get("X-Forward-Auth-Secret", "")
@@ -133,8 +146,8 @@ def check_api_password(
     Utility function to check API password.
     Can be used as a dependency in individual routes if needed.
     Supports Docker secrets via OPEN_NOTEBOOK_PASSWORD_FILE.
-    Returns True without checking credentials if OPEN_NOTEBOOK_PASSWORD is not configured.
-    Raises 401 if credentials are missing or don't match the configured password.
+    Fail-closed: raises 500 if OPEN_NOTEBOOK_PASSWORD is not configured, 401 if
+    credentials are missing or don't match the configured password.
     """
     password = get_secret_from_env("OPEN_NOTEBOOK_PASSWORD")
 

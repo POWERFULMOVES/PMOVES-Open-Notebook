@@ -4,17 +4,21 @@ import { useMemo, useState } from 'react'
 
 import { AppShell } from '@/components/layout/AppShell'
 import { NotebookList } from './components/NotebookList'
+import { RecentlyViewed } from './components/RecentlyViewed'
 import { Button } from '@/components/ui/button'
-import { Plus, RefreshCw } from 'lucide-react'
+import { Plus, RefreshCw, LayoutGrid, List } from 'lucide-react'
 import { useNotebooks } from '@/lib/hooks/use-notebooks'
 import { CreateNotebookDialog } from '@/components/notebooks/CreateNotebookDialog'
 import { Input } from '@/components/ui/input'
 import { useTranslation } from '@/lib/hooks/use-translation'
+import { useNotebookViewStore } from '@/lib/stores/notebook-view-store'
 
 export default function NotebooksPage() {
   const { t } = useTranslation()
   const [createDialogOpen, setCreateDialogOpen] = useState(false)
   const [searchTerm, setSearchTerm] = useState('')
+  const viewMode = useNotebookViewStore((state) => state.viewMode)
+  const setViewMode = useNotebookViewStore((state) => state.setViewMode)
   const { data: notebooks, isLoading, refetch } = useNotebooks(false)
   const { data: archivedNotebooks } = useNotebooks(true)
 
@@ -53,12 +57,34 @@ export default function NotebooksPage() {
         <div className="p-6 space-y-6">
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-4">
-            <h1 className="text-2xl font-bold">{t('notebooks.title')}</h1>
+            <h1 className="font-display text-2xl font-bold tracking-tight">{t('notebooks.title')}</h1>
             <Button variant="outline" size="sm" onClick={() => refetch()}>
               <RefreshCw className="h-4 w-4" />
             </Button>
           </div>
           <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:gap-4">
+            <div className="flex items-center rounded-md border p-0.5">
+              <Button
+                variant={viewMode === 'tile' ? 'secondary' : 'ghost'}
+                size="sm"
+                onClick={() => setViewMode('tile')}
+                aria-label={t('notebooks.tileView')}
+                aria-pressed={viewMode === 'tile'}
+                title={t('notebooks.tileView')}
+              >
+                <LayoutGrid className="h-4 w-4" />
+              </Button>
+              <Button
+                variant={viewMode === 'list' ? 'secondary' : 'ghost'}
+                size="sm"
+                onClick={() => setViewMode('list')}
+                aria-label={t('notebooks.listView')}
+                aria-pressed={viewMode === 'list'}
+                title={t('notebooks.listView')}
+              >
+                <List className="h-4 w-4" />
+              </Button>
+            </div>
             <Input
               id="notebook-search"
               name="notebook-search"
@@ -77,6 +103,8 @@ export default function NotebooksPage() {
         </div>
         
         <div className="space-y-8">
+          <RecentlyViewed />
+
           <NotebookList 
             notebooks={filteredActive} 
             isLoading={isLoading}

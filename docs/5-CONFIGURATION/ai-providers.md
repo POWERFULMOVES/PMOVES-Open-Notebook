@@ -115,6 +115,20 @@ Opus: $10-50+/month
 
 ---
 
+### Anthropic Compatible
+
+Use this provider for services that implement the Anthropic Messages API at a custom URL.
+
+1. Go to **Settings** → **API Keys**
+2. Add an **Anthropic Compatible** credential
+3. Enter the provider's API key and base URL (the API root, with or without a trailing `/v1`)
+4. Save and test the connection
+5. Discover models, or search for and manually register a model if the endpoint does not list them
+
+Only language models are supported for Anthropic-compatible credentials.
+
+---
+
 ### Google Gemini
 
 **Cost:** ~$0.075-0.30 per 1K tokens (competitive with OpenAI)
@@ -133,13 +147,15 @@ Opus: $10-50+/month
 6. Click **Discover Models** → **Register Models**
 
 **Available Models:**
-- `gemini-2.0-flash-exp` — Latest experimental, fastest (recommended)
-- `gemini-2.0-flash` — Stable version, fast, cheap
+- `gemini-2.5-pro` — Strongest, best for long context (1M tokens)
+- `gemini-3.5-flash` — Fast, good for general use
+- `gemini-3.1-flash-lite` — Fastest and cheapest
+- `gemini-2.5-flash` — Previous-gen stable, cheaper
 
 **Recommended:**
-- For general use: `gemini-2.0-flash-exp` (best value, latest)
-- For cheap: `gemini-1.5-flash` (very cheap)
-- For complex/long context: `gemini-1.5-pro-latest` (2M token context)
+- For general use: `gemini-3.5-flash` (best value, latest)
+- For cheap: `gemini-3.1-flash-lite` (very cheap)
+- For complex/long context: `gemini-2.5-pro` (1M token context)
 
 **Advantages:**
 - Very long context (1M tokens)
@@ -217,15 +233,22 @@ Opus: $10-50+/month
 **Available Models (100+ options):**
 - OpenAI: `openai/gpt-4o`, `openai/o1`
 - Anthropic: `anthropic/claude-sonnet-4.5`, `anthropic/claude-3.5-haiku`
-- Google: `google/gemini-2.0-flash-exp`, `google/gemini-1.5-pro`
+- Google: `google/gemini-3.5-flash`, `google/gemini-2.5-pro`
 - Meta: `meta-llama/llama-3.3-70b-instruct`, `meta-llama/llama-3.1-405b-instruct`
 - Mistral: `mistralai/mistral-large-2411`
 - DeepSeek: `deepseek/deepseek-chat`
 - And many more...
 
+**Speech Models (Text-to-Speech & Speech-to-Text):**
+OpenRouter also exposes audio models. Discovery seeds working defaults; add any
+other `vendor/model` id manually via the custom-model input.
+- Text-to-Speech: `microsoft/mai-voice-2` (uses Microsoft neural voice names such
+  as `en-US-AvaNeural`, not OpenAI's `alloy`/`nova` set)
+- Speech-to-Text: `openai/whisper-1`, `openai/whisper-large-v3`
+
 **Recommended:**
 - For quality: `anthropic/claude-sonnet-4.5` (best overall)
-- For speed/cost: `google/gemini-2.0-flash-exp` (very fast, cheap)
+- For speed/cost: `google/gemini-2.5-flash` (very fast, cheap)
 - For open-source: `meta-llama/llama-3.3-70b-instruct`
 - For reasoning: `openai/o1`
 
@@ -319,6 +342,90 @@ Heavy use: Depends on models chosen
 
 ---
 
+### Cohere
+
+**Cost:** Usage-based
+
+**Get Your API Key:**
+1. Go to https://dashboard.cohere.com/api-keys
+2. Create an account (if needed)
+3. Create a new API key
+
+**Configure in Open Notebook:**
+1. Go to **Settings** → **API Keys**
+2. Click **Add Credential**
+3. Select provider: **Cohere**
+4. Give it a name, paste your API key
+5. Click **Save**, then **Test Connection**
+6. Click **Discover Models** → **Register Models**
+
+**Available Models:**
+- `command-a-03-2025` — Latest Command language model
+- `embed-v4.0` — Latest embedding model (assign the **Embedding** type when registering)
+
+**Notes:**
+- Cohere uses its native v2 API (`/v2/chat`, `/v2/embed`), not an OpenAI-compatible endpoint.
+- Reranking is not yet available in Open Notebook (tracked separately).
+
+**Troubleshooting:**
+- "Invalid API key" → Check the key in the Cohere dashboard
+- "Model not available" → Re-discover models from the credential
+
+---
+
+### Novita
+
+**Cost:** Pay-per-model (competitive)
+
+**Get Your API Key:**
+1. Go to https://novita.ai/settings/key-management
+2. Create an account (if needed)
+3. Create a new API key
+
+**Configure in Open Notebook:**
+1. Go to **Settings** → **API Keys**
+2. Click **Add Credential**
+3. Select provider: **Novita**
+4. Give it a name, paste your API key
+5. Click **Save**, then **Test Connection**
+6. Click **Discover Models** → **Register Models**
+
+**Notes:**
+- Novita is an OpenAI-compatible gateway (`https://api.novita.ai/openai`) for open-weight LLMs.
+
+**Troubleshooting:**
+- "Invalid API key" → Check the key in the Novita console
+- "Model not available" → Re-discover models from the credential
+
+---
+
+### PayPerQ (PPQ)
+
+**Cost:** Pay-as-you-go across the providers it routes to
+
+**Get Your API Key:**
+1. Go to https://ppq.ai
+2. Create an account (if needed)
+3. Create a new API key
+
+**Configure in Open Notebook:**
+1. Go to **Settings** → **API Keys**
+2. Click **Add Credential**
+3. Select provider: **PayPerQ**
+4. Give it a name, paste your API key
+5. Click **Save**, then **Test Connection**
+6. Click **Discover Models** → **Register Models**
+
+**Notes:**
+- PPQ is a multi-modality OpenAI-compatible gateway (`https://api.ppq.ai/v1`) offering language, embedding, speech-to-text and text-to-speech models.
+- Discovered models are classified by name; adjust the model type when registering if a model lands in the wrong slot.
+
+**Troubleshooting:**
+- "Invalid API key" → Check the key in the PPQ dashboard
+- "Model not available" → Re-discover models from the credential
+
+---
+
 ## Self-Hosted / Local
 
 ### Ollama (Recommended for Local)
@@ -398,6 +505,32 @@ CPU-only:
 - "Connection refused" → Ollama not running or wrong URL in credential
 - "Model not found" → Download it: `ollama pull modelname`
 - "Out of memory" → Use smaller model or add more RAM
+
+---
+
+### oMLX (Apple Silicon)
+
+**Cost:** Free (electricity only)
+
+**Requirements:** Apple Silicon Mac. oMLX runs on the host (not in Linux containers).
+
+**Setup oMLX:**
+1. Install from [oMLX](https://omlx.ai/) / [jundot/omlx](https://github.com/jundot/omlx)
+2. Run on port **11435** (oMLX’s default `8000` conflicts with SurrealDB):
+   ```bash
+   OMLX_PORT=11435 omlx serve
+   ```
+3. Load models in the oMLX admin UI
+
+**Configure in Open Notebook:**
+1. Go to **Settings** → **API Keys**
+2. Click **Add Credential**
+3. Select provider: **oMLX**
+4. Base URL defaults to `http://localhost:11435/v1` (use `http://host.docker.internal:11435/v1` if Open Notebook is in Docker)
+5. API key is optional (only if you started oMLX with `--api-key`)
+6. Click **Save**, then **Test Connection** → **Discover Models** → **Register Models**
+
+See [oMLX Setup Guide](omlx.md) for port conflict details and troubleshooting.
 
 ---
 

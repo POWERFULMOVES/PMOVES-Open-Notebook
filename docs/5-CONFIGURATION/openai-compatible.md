@@ -26,6 +26,7 @@ Open Notebook can connect to any server using this format.
 | **Text Generation WebUI** | Full-featured local inference | https://github.com/oobabooga/text-generation-webui |
 | **vLLM** | High-performance serving | https://github.com/vllm-project/vllm |
 | **Ollama** | Simple local models | (Use native Ollama provider instead) |
+| **oMLX** | Apple Silicon / MLX | (Use native [oMLX](omlx.md) provider instead) |
 | **LocalAI** | Local AI inference | https://github.com/mudler/LocalAI |
 | **llama.cpp server** | Lightweight inference | https://github.com/ggerganov/llama.cpp |
 
@@ -203,7 +204,10 @@ services:
     image: vllm/vllm-openai:latest
     command: --model meta-llama/Llama-3.1-8B-Instruct
     ports:
-      - "8000:8000"
+      # Localhost only (vLLM has no authentication by default), on host port
+      # 8001 because SurrealDB already publishes 8000. Open Notebook reaches
+      # vLLM over the compose network at http://vllm:8000/v1 regardless.
+      - "127.0.0.1:8001:8000"
     volumes:
       - ~/.cache/huggingface:/root/.cache/huggingface
     deploy:
@@ -400,3 +404,4 @@ Use OpenAI-compatible when:
 - **[Local STT Setup](local-stt.md)** - Speech-to-text with Speaches
 - **[AI Providers](ai-providers.md)** - All provider options
 - **[Ollama Setup](ollama.md)** - Native Ollama integration
+- **[oMLX Setup](omlx.md)** - Native oMLX (Apple Silicon) integration
