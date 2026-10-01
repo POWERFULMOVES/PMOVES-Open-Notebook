@@ -22,7 +22,7 @@ from starlette.exceptions import HTTPException as StarletteHTTPException
 
 from prometheus_client import make_asgi_app
 
-from api.auth import RemoteUserMiddleware
+from api.auth import RemoteUserMiddleware, SupabaseJWTMiddleware
 from api.middleware import MaxBodySizeMiddleware, get_max_upload_size_bytes
 from api.routers import (
     auth,
@@ -245,6 +245,7 @@ if CORS_IS_DEFAULT_WILDCARD:
 else:
     logger.info(f"CORS allowed origins: {CORS_ALLOWED_ORIGINS}")
 
+# Add Supabase JWT middleware (validates Bearer tokens against SUPABASE_JWT_SECRET)
 # Add password authentication middleware first
 # Exclude /api/auth/status and /api/config from authentication
 app.add_middleware(

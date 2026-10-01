@@ -1,3 +1,11 @@
+import os
+try:
+    from jose import jwt
+    HAS_JOSE = True
+except ImportError:
+    HAS_JOSE = False
+    jwt = None
+
 import hmac
 import secrets
 from typing import Optional
@@ -175,3 +183,65 @@ def check_api_password(
         )
 
     return True
+
+
+class SupabaseJWTMiddleware(BaseHTTPMiddleware):
+    """
+    Validates Supabase-issued JWT Bearer tokens as an alternative to
+    password auth. Enabled when SUPABASE_JWT_SECRET is set.
+
+    Pattern sourced from PMOVES-BoTZ features/mcp_bridge/auth.py (PR #181,
+    commit 1ba7a05). Validates HS256 JWTs against the same JWT_SECRET
+    the GoTrue auth server uses. Rejects anon keys; accepts authenticated
+    and service_role tokens.
+
+    Falls through to PasswordAuthMiddleware when:
+    - SUPABASE_JWT_SECRET is not set
+    - No Bearer token in the Authorization header
+    - Token validation fails
+    """
+
+    def __init__(self, app, excluded_paths: Optional[list] = None):
+        super().__init__(app)
+        self.secret = os.getenv("SUPABASE_JWT_SECRET", "")
+        self.algorithm = "HS256"
+        self.excluded_paths = excluded_paths or [
+            "/", "/health", "/docs", "/openapi.json", "/redoc",
+        ]
+
+    async def dispatch(self, request: Request, call_next):
+        if not self.secret or not HAS_JOSE:
+            return await call_next(request)
+
+        auth_header = request.headers.get("Authorization", "")
+        if not auth_header.startswith("Bearer "):
+            return await call_next(request)
+
+        token = auth_header.replace("Bearer ", "", 1)
+        try:
+            payload = jwt.decode(
+                token,
+                self.secret,
+                algorithms=[self.algorithm],
+                options={"verify_signature": True, "verify_aud": False, "verify_exp": True},
+            )
+        except Exception:
+            return await call_next(request)  # fall through to password auth
+
+        role = payload.get("role", "")
+        if role == "anon":
+            return await call_next(request)  # anon tokens don't grant access
+
+        # Valid authenticated or service_role token — mark request as authenticated
+        request.state.authenticated = True
+        request.state.user_id = payload.get("sub", "")
+        request.state.user_role = role
+        return await call_next(request)
+
+
+try:
+    from jose import jwt
+    HAS_JOSE = True
+except ImportError:
+    HAS_JOSE = False
+    jwt = None
